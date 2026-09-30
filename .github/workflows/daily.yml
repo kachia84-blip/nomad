@@ -26,8 +26,13 @@ jobs:
           python-version: "3.11"
           cache: pip
       - run: pip install -r requirements.txt
-      - name: 분석 실행
-        run: python build_snapshot.py --if-needed
+      - name: 분석 실행 (예약 실행은 이번 회차 결과가 있으면 건너뜀, 수동 실행은 항상 실행)
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            python build_snapshot.py
+          else
+            python build_snapshot.py --if-needed
+          fi
       - name: 결과 저장
         run: |
           git config user.name "nomad-bot"
