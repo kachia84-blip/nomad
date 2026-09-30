@@ -1,0 +1,36 @@
+name: 유목민 주도주 분석
+
+on:
+  schedule:
+    - cron: "30 11,15,19,23,3,7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nomad
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TZ: Asia/Seoul
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: 분석 실행
+        run: python build_snapshot.py --if-needed
+      - name: 결과 저장
+        run: |
+          git config user.name "nomad-bot"
+          git config user.email "nomad-bot@users.noreply.github.com"
+          git add reports docs
+          git diff --cached --quiet || (git commit -m "분석 결과 갱신" && git push)
