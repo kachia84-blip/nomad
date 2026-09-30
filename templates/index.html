@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>유목민 주도주 분석</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --text:#1c2330; --sub:#657085; --line:#e3e7ee; --acc:#2456d6; --up:#d92d20; --down:#1a56db; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#12151b; --card:#1b1f27; --text:#e8ebf1; --sub:#9aa4b6; --line:#2b313c; --acc:#6d95ff; --up:#ff6b5e; --down:#6d95ff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,"Malgun Gothic",sans-serif; line-height:1.5; }
+  .wrap { max-width:1100px; margin:0 auto; padding:24px 16px 60px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:var(--sub); font-size:14px; margin-bottom:18px; }
+  .bar { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px; }
+  button, a.btn { background:var(--acc); color:#fff; border:0; border-radius:8px; padding:10px 16px; font-size:15px; cursor:pointer; text-decoration:none; }
+  button:disabled { opacity:.5; cursor:default; }
+  a.btn.ghost { background:transparent; color:var(--acc); border:1px solid var(--acc); }
+  .progress { height:8px; background:var(--line); border-radius:4px; overflow:hidden; margin-bottom:10px; display:none; }
+  .progress div { height:100%; width:0; background:var(--acc); transition:width .3s; }
+  pre.log { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:12.5px; max-height:150px; overflow:auto; margin:0 0 20px; white-space:pre-wrap; display:none; }
+  .tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; }
+  .tab { border:1px solid var(--line); background:var(--card); color:var(--text); border-radius:999px; padding:6px 14px; font-size:14px; }
+  .tab.on { background:var(--acc); color:#fff; border-color:var(--acc); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  .head { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+  .name { font-weight:700; font-size:17px; }
+  .code { color:var(--sub); font-size:12px; margin-left:6px; }
+  .price { font-variant-numeric:tabular-nums; text-align:right; }
+  .up { color:var(--up); } .down { color:var(--down); }
+  .meta { color:var(--sub); font-size:13px; margin:4px 0 8px; }
+  .tags { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:8px; }
+  .tag { font-size:12px; padding:2px 8px; border-radius:6px; background:color-mix(in srgb,var(--acc) 14%,transparent); color:var(--acc); }
+  .tag.kw { background:color-mix(in srgb,var(--up) 14%,transparent); color:var(--up); font-weight:600; }
+  .notes { font-size:13px; color:var(--sub); margin:0 0 8px; padding-left:16px; }
+  .news a { display:block; color:var(--text); text-decoration:none; font-size:13.5px; padding:4px 0; border-top:1px solid var(--line); }
+  .news a:hover { color:var(--acc); }
+  .news small { color:var(--sub); margin-right:5px; }
+  textarea { width:100%; background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font:inherit; font-size:14px; margin-bottom:10px; resize:vertical; }
+  .plan { background:color-mix(in srgb,var(--acc) 7%,transparent); border-radius:8px; padding:8px 10px; margin-bottom:8px; font-size:13px; }
+  .plan b.t { color:var(--acc); }
+  .lv { display:grid; grid-template-columns:repeat(4,1fr); gap:4px; margin:6px 0; text-align:center; }
+  .lv div { background:var(--card); border:1px solid var(--line); border-radius:6px; padding:4px 2px; font-size:12px; color:var(--sub); }
+  .lv strong { display:block; font-size:14px; color:var(--text); font-variant-numeric:tabular-nums; }
+  .lv .buy strong { color:var(--up); } .lv .stop strong { color:var(--down); }
+  .rank { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  .rank .no { font-size:12px; color:var(--sub); font-variant-numeric:tabular-nums; }
+  .score { font-weight:700; font-size:20px; font-variant-numeric:tabular-nums; }
+  .score small { font-size:12px; font-weight:400; color:var(--sub); }
+  .grade { font-size:12px; font-weight:700; padding:1px 7px; border-radius:5px; color:#fff; background:var(--sub); }
+  .grade.A { background:#1a8a4a; } .grade.B { background:var(--acc); } .grade.C { background:#b7791f; } .grade.D { background:var(--sub); }
+  .parts { display:grid; grid-template-columns:repeat(6,1fr); gap:3px; margin-bottom:8px; font-size:11px; color:var(--sub); text-align:center; }
+  .parts i { display:block; height:4px; border-radius:2px; background:var(--line); margin-top:2px; overflow:hidden; }
+  .parts i b { display:block; height:100%; background:var(--acc); }
+  details.guide { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 14px; margin-bottom:16px; font-size:14px; }
+  details.guide summary { cursor:pointer; font-weight:600; }
+  details.guide h3 { font-size:14px; margin:12px 0 4px; }
+  details.guide ul, details.guide ol { margin:0; padding-left:20px; color:var(--sub); }
+  details.guide li { margin:2px 0; }
+  .empty { color:var(--sub); text-align:center; padding:50px 0; }
+  .note { color:var(--sub); font-size:12px; margin-top:28px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>유목민 주도주 분석</h1>
+  <div class="sub">재·차·거·시 기반 · 자동 실행 {{ auto_times|join(', ') }} (서버가 켜져 있을 때)</div>
+
+  <textarea id="manual" rows="2" placeholder="SNS·커뮤니티에서 본 종목을 직접 추가 (종목명 또는 코드, 쉼표/줄바꿈으로 구분)  예: 삼성전자, 005930"></textarea>
+  <div class="bar">
+    <button id="run">지금 분석 실행</button>
+    <a class="btn ghost" href="/api/report.md">보고서(.md) 다운로드</a>
+    <span id="stamp" class="sub" style="margin:0"></span>
+  </div>
+  <div class="progress" id="prog"><div id="progbar"></div></div>
+  <pre class="log" id="log"></pre>
+
+  <details class="guide" open>
+    <summary>이 페이지 활용법 · 점수 기준</summary>
+    <h3>보는 순서</h3>
+    <ol>
+      <li><b>점수 높은 순</b>으로 정렬돼 있습니다. 위에서부터 보고, D등급은 참고만 하세요.</li>
+      <li>카드의 <b>타점 태그</b>로 어떤 자리인지 확인합니다. 탭으로 타점별로 걸러 볼 수 있습니다.</li>
+      <li><b>매수 · 손절 · 목표가</b>를 미리 주문 계획으로 적어 둡니다. 손절가를 종가로 이탈하면 전량 정리합니다.</li>
+      <li><b>뉴스 헤드라인과 #키워드</b>로 재료를 확인합니다. 재료가 있으면 시장 관심이 붙을 가능성이 높습니다.</li>
+      <li>장 시작 전에 시간외 흐름과 뉴스를 한 번 더 보고, 계획대로 조건이 맞을 때만 진입합니다.</li>
+    </ol>
+    <h3>점수 배점 (100점)</h3>
+    <ul>
+      <li>타점 30 · 겹치는 타점이 많을수록 높음</li>
+      <li>손익비 25 · 1차 목표 이익이 손절폭의 3배면 만점</li>
+      <li>손절폭 15 · 3% 이하 만점, 10% 이상 0점</li>
+      <li>주도성 15 · 거래대금 상위, 거래량 1천만 주, 시간외 4% 각 5점</li>
+      <li>재료 10 · 핵심 키워드 하나당 4점</li>
+      <li>추세 5 · 45일선 위, 3·5·8일선 정배열</li>
+    </ul>
+    <h3>등급</h3>
+    <ul><li>A 75점 이상 · B 60점 이상 · C 45점 이상 · D 그 아래</li></ul>
+    <h3>주의</h3>
+    <ul><li>점수는 조건이 얼마나 갖춰졌는지 보는 규칙 기반 지표입니다. 수익을 예측하지 않습니다. 투자 판단과 책임은 본인에게 있습니다.</li></ul>
+  </details>
+
+  <div class="tabs" id="tabs"></div>
+  <div class="grid" id="grid"></div>
+  <p class="note">참고용 자동 분석입니다. 투자 판단과 책임은 본인에게 있습니다.</p>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let data = null, filter = "전체";
+const fmt = n => Math.round(n).toLocaleString();
+const esc = s => s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function render() {
+  if (!data) { $("grid").innerHTML = '<div class="empty">아직 결과가 없습니다. “지금 분석 실행”을 눌러 주세요.</div>'; return; }
+  $("stamp").textContent = `${data.generated_at} 기준 · 후보 ${data.candidate_count}개 중 ${data.stocks.length}개 타점`;
+  const types = ["전체", ...new Set(data.stocks.flatMap(s => Object.keys(s.setups)))];
+  $("tabs").innerHTML = types.map(t => `<button class="tab ${t===filter?'on':''}" data-t="${t}">${t}</button>`).join("");
+  const list = data.stocks.filter(s => filter === "전체" || filter in s.setups);
+  const PARTS = {"타점":30,"손익비":25,"손절폭":15,"주도성":15,"재료":10,"추세":5};
+  $("grid").innerHTML = list.length ? list.map(s => `
+    <div class="card">
+      <div class="rank"><span class="no">${data.stocks.indexOf(s)+1}위</span><span class="score">${s.score}<small>/100</small></span><span class="grade ${s.grade}">${s.grade}</span></div>
+      <div class="parts">${Object.entries(PARTS).map(([k,m])=>`<div>${k}<i><b style="width:${s.score_parts[k]/m*100}%"></b></i></div>`).join("")}</div>
+      <div class="head">
+        <div><span class="name">${esc(s.name)}</span><span class="code">${s.code}</span></div>
+        <div class="price"><b>${fmt(s.price)}</b> <span class="${s.rate>=0?'up':'down'}">${s.rate>=0?'+':''}${s.rate.toFixed(2)}%</span></div>
+      </div>
+      <div class="meta">거래량 ${fmt(s.volume)} · RSI ${s.rsi.toFixed(1)} · ${s.sources.join(', ')}</div>
+      <div class="tags">${Object.keys(s.setups).map(k=>`<span class="tag">${k}</span>`).join("")}
+        ${s.keywords.map(k=>`<span class="tag kw">#${esc(k)}</span>`).join("")}</div>
+      ${Object.entries(s.setups).map(([k,v])=>{ const p = s.plans[k]; return `
+        <div class="plan"><b class="t">${k}</b> · ${esc(v)}<br>${esc(p.how)}
+          <div class="lv">
+            <div class="buy">매수<strong>${fmt(p.entry)}</strong></div>
+            <div class="stop">손절 -${p.risk_pct}%<strong>${fmt(p.stop)}</strong></div>
+            <div>1차 목표<strong>${fmt(p.target1)}</strong></div>
+            <div>2차 목표<strong>${fmt(p.target2)}</strong></div>
+          </div>
+          <small>손익비 ${p.rr} · ${esc(p.exit_rule)}</small></div>`}).join("")}
+      <div class="news">${s.news.slice(0,4).map(a=>`<a href="${a.link}" target="_blank" rel="noopener"><small>${a.source}</small>${esc(a.title)}</a>`).join("") || '<small>뉴스 없음</small>'}</div>
+    </div>`).join("") : '<div class="empty">해당 타점 종목이 없습니다.</div>';
+}
+
+$("tabs").onclick = e => { if (e.target.dataset.t) { filter = e.target.dataset.t; render(); } };
+
+async function loadResult() { data = await (await fetch("/api/result")).json(); render(); }
+
+async function poll() {
+  const s = await (await fetch("/api/status")).json();
+  $("prog").style.display = $("log").style.display = (s.running || s.logs.length) ? "block" : "none";
+  $("progbar").style.width = Math.min(100, s.done / s.total * 100) + "%";
+  $("log").textContent = s.logs.join("\n"); $("log").scrollTop = 1e9;
+  $("run").disabled = s.running;
+  if (s.running) setTimeout(poll, 1500); else if (s.logs.length) loadResult();
+}
+
+$("run").onclick = async () => { await fetch("/api/run", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({manual:$("manual").value})}); poll(); };
+loadResult(); poll();
+</script>
+</body>
+</html>
