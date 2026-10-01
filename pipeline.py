@@ -3,6 +3,7 @@ import json
 import os
 from datetime import datetime
 
+import config
 import collector, indicators, screener, news, report, trade_plan, scoring
 
 RESULT_FILE = os.path.join(report.REPORT_DIR, "latest.json")
@@ -42,10 +43,13 @@ def run_pipeline(log, progress, manual=None):
         s["news"], s["keywords"] = r["articles"], r["keywords"]
 
     picked = scoring.apply_scores(picked)  # 100점 만점 점수 → 높은 순 정렬
+    screened = len(picked)
+    picked = picked[: config.SHOW_TOP_N]    # 상위 N개만 남김
     result = {
         "date": datetime.now().strftime("%Y-%m-%d"),
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "candidate_count": total,
+        "screened_count": screened,
         "stocks": picked,
     }
     report.save_report(result)

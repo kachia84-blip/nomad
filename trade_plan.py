@@ -1,5 +1,6 @@
 """매수·매도 지점 계산 모듈.
-타점(setup)마다 '어디서 사고 / 어디서 손절하고 / 어디서 나눠 팔지'를 가격으로 계산합니다.
+타점(setup)마다 '어디서 사고 / 어디서 손절하고 / 어디서 나눠 팔지'를 가격으로 계산하고,
+그 가격을 왜 그렇게 잡았는지 이유 문장도 함께 만듭니다.
 ※ 책의 문장을 그대로 옮긴 것이 아니라, 유목민식 원칙(눌림에서 진입, 손절은 근거선 이탈, 분할 매도)을
    규칙으로 만든 것입니다. 기준을 바꾸고 싶으면 이 파일의 숫자만 고치면 됩니다."""
 
@@ -8,44 +9,68 @@ def tick(price):
     """한국 주식 호가단위로 가격을 맞춘다."""
     for limit, unit in ((2000, 1), (5000, 5), (20000, 10), (50000, 50), (200000, 100), (500000, 500)):
         if price < limit:
-            return round(price / unit) * unit
-    return round(price / 1000) * 1000
+            return float(round(price / unit) * unit)
+    return float(round(price / 1000) * 1000)
+
+
+def won(price):
+    return f"{tick(price):,.0f}원"
 
 
 def make_plan(setup, df):
-    """한 타점에 대한 매수/손절/목표 계획(dict)을 만든다."""
+    """한 타점에 대한 매수/손절/목표 계획(dict)과 각 가격의 산정 이유를 만든다."""
     t = df.iloc[-1]
     high20 = df.iloc[-21:-1]["high"].max()      # 직전 20일 고점 = 저항선 겸 1차 목표
     low5 = df.iloc[-6:]["low"].min()
 
     if setup == "거감음봉":
-        entry = t["high"]                       # 음봉의 고가를 넘어서면 매수(거래 없이 눌린 뒤 재상승 신호)
-        stop = t["low"]                         # 그 음봉 저가를 깨면 시나리오 실패
+        entry, stop = t["high"], t["low"]
         how = "다음 날 오늘 음봉의 고가를 돌파할 때 매수 (돌파 못 하면 관망)"
+        why_entry = (f"오늘 음봉의 고가 {won(entry)}를 다시 넘어서면, 거래량이 줄어든 채 눌린 뒤 "
+                     f"매수세가 돌아왔다는 신호로 보고 그 가격을 진입가로 잡았습니다.")
+        why_stop = f"오늘 음봉의 저가 {won(stop)}를 깨면 '거래 없이 눌렸다'는 시나리오가 틀린 것이라 손절가로 잡았습니다."
     elif setup == "이평선 지지":
-        near = min((n for n in (3, 5, 8)), key=lambda n: abs(t["close"] - t[f"ma{n}"]))
-        entry = t["close"]
-        stop = t[f"ma{near}"] * 0.97
+        near = min((3, 5, 8), key=lambda n: abs(t["close"] - t[f"ma{n}"]))
+        ma = t[f"ma{near}"]
+        entry, stop = t["close"], ma * 0.97
         how = f"{near}일선 지지 확인 구간(현재가 부근)에서 분할 매수"
+        why_entry = (f"현재가 {won(entry)}가 {near}일선({won(ma)}) 부근이라, 이평선 위에서 지지받는 "
+                     f"자리로 보고 현재가 부근을 진입가로 잡았습니다.")
+        why_stop = f"{near}일선 {won(ma)}의 3% 아래입니다. 이 선 밑으로 내려가면 지지에 실패한 것으로 봅니다."
     elif setup == "낙주":
-        entry = t["ma45"] * 1.01
-        stop = t["ma45"] * 0.96
+        ma45 = t["ma45"]
+        entry, stop = ma45 * 1.01, ma45 * 0.96
         how = "45일선 터치 구간에서 소액 진입, 반등 확인 시 추가"
+        why_entry = (f"45일선 {won(ma45)}의 1% 위입니다. 급등 후 처음 45일선까지 눌린 자리에서 "
+                     f"지지를 확인하는 구간으로 잡았습니다.")
+        why_stop = f"45일선 {won(ma45)}의 4% 아래입니다. 잠깐 이탈은 허용하되 그 이상 밀리면 추세가 꺾인 것으로 봅니다."
     else:  # RSI 추세 전환
-        entry = t["high"]
-        stop = low5
+        entry, stop = t["high"], low5
         how = "다음 날 오늘 고가 돌파 시 매수 (과매도 반등 확인)"
+        why_entry = (f"RSI가 과매도(30 이하)를 찍고 올라선 상태에서, 오늘 고가 {won(entry)}를 넘어서면 "
+                     f"반등이 이어진다고 보고 진입가로 잡았습니다.")
+        why_stop = f"최근 5일 최저가 {won(stop)}입니다. 반등이 시작된 저점이라 깨지면 반등 실패로 봅니다."
 
     risk = max(entry - stop, entry * 0.01)
-    t1 = high20 if high20 > entry * 1.03 else entry + 1.5 * risk
+    if high20 > entry * 1.03:
+        t1 = high20
+        why_t1 = f"직전 20일 고점 {won(t1)}이 매물이 몰린 저항선이라 1차 목표로 잡았습니다. 여기서 절반을 정리합니다."
+    else:
+        t1 = entry + 1.5 * risk
+        why_t1 = (f"직전 20일 고점이 진입가보다 3%도 높지 않아 저항선 구실을 못 합니다. 대신 위험폭 "
+                  f"{won(risk)}의 1.5배를 더한 {won(t1)}를 1차 목표로 잡았습니다.")
     t2 = max(entry + 3 * risk, t1 * 1.05)
+    why_t2 = f"위험폭의 3배({won(entry + 3 * risk)})와 1차 목표+5%({won(t1 * 1.05)}) 중 큰 값입니다. 남은 물량은 추세를 따라갑니다."
+
     return {
         "how": how,
         "entry": tick(entry), "stop": tick(stop),
         "target1": tick(t1), "target2": tick(t2),
-        "risk_pct": round(risk / entry * 100, 1),
-        "rr": round((t1 - entry) / risk, 2),
+        "risk_pct": round(float(risk / entry * 100), 1),
+        "rr": round(float((t1 - entry) / risk), 2),
         "exit_rule": "1차 목표에서 절반 매도, 나머지는 5일선 종가 이탈 시 정리. 손절가 종가 이탈 시 전량 매도.",
+        "reasons": {"entry": why_entry, "stop": why_stop, "target1": why_t1, "target2": why_t2,
+                    "rr": f"손익비 = (1차 목표 − 진입가) ÷ (진입가 − 손절가) = {won(t1 - entry)} ÷ {won(risk)}"},
     }
 
 
