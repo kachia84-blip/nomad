@@ -17,6 +17,11 @@ def won(price):
     return f"{tick(price):,.0f}원"
 
 
+def tomorrow_zone(entry, stop):
+    """내일 시초가 기준 매수 구간. 오늘 종가(진입 기준가)의 ±3% 안이면서 손절가보다 위일 때만 매수."""
+    return tick(max(stop, entry * 0.97)), tick(entry * 1.03)
+
+
 def make_plan(setup, df):
     """한 타점에 대한 매수/손절/목표 계획(dict)과 각 가격의 산정 이유를 만든다."""
     t = df.iloc[-1]

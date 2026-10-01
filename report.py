@@ -1,5 +1,8 @@
 """보고서 모듈 - 분석 결과를 마크다운(.md) 파일로 저장합니다."""
 import os
+
+import config
+import trade_plan
 from datetime import datetime
 
 REPORT_DIR = os.path.join(os.path.dirname(__file__), "reports")
@@ -12,6 +15,7 @@ def report_path(date=None):
 
 def build_markdown(result):
     """결과 dict → 마크다운 문자열."""
+    result = {**result, "stocks": result["stocks"][:config.SHOW_TOP_N]}
     lines = [f"# 유목민 당일 주도주 분석 보고서 ({result['date']})", "",
              f"- 생성 시각: {result['generated_at']}",
              f"- 후보 종목 {result['candidate_count']}개 중 타점 {result.get('screened_count', len(result['stocks']))}개, 점수 상위 {len(result['stocks'])}개 표시", "",
@@ -20,7 +24,7 @@ def build_markdown(result):
     for rank, s in enumerate(result["stocks"], 1):
         heads = "<br>".join(a["title"].replace("|", "/") for a in s["news"][:3]) or "-"
         lines.append(
-            f"| {rank} | {s['score']}점({s['grade']}) | {s['name']} | {s['price']:,.0f} | {s['volume']:,.0f} | {' / '.join(s['setups'])} "
+            f"| {rank} | {s['score']}점({s['grade']}) | {s['name']}{' (눌림목)' if s.get('pullback') else ''} | {s['price']:,.0f} | {s['volume']:,.0f} | {' / '.join(s['setups'])} "
             f"| {heads} | {', '.join(s['keywords']) or '-'} |")
     lines += ["", "## 타점 상세", ""]
     for s in result["stocks"]:
@@ -40,6 +44,8 @@ def build_markdown(result):
             lines.append(f"- **[{k}] 매매 계획**: {p['how']}")
             for key, label in (("entry", "매수"), ("stop", "손절"), ("target1", "1차 목표"), ("target2", "2차 목표")):
                 lines.append(f"  - {label} 산정 이유: {p['reasons'][key]}")
+            lo, hi = trade_plan.tomorrow_zone(p["entry"], p["stop"])
+            lines.append(f"  - 내일 매수 조건: 시가가 {lo:,.0f}~{hi:,.0f}원이면 매수, {lo:,.0f}원 아래로 출발하면 보류, {hi:,.0f}원 넘게 갭상승하면 추격하지 않고 눌림을 기다림")
             lines.append(f"  - 매수 {p['entry']:,.0f} / 손절 {p['stop']:,.0f} (-{p['risk_pct']}%) / 1차 목표 {p['target1']:,.0f} / 2차 목표 {p['target2']:,.0f} / 손익비 {p['rr']}")
         lines.append("- **점수 상세**")
         for d in s["score_detail"]:

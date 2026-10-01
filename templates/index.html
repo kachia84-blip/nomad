@@ -76,7 +76,11 @@
   .sum-foot { display:flex; justify-content:space-between; align-items:center; margin-top:6px; font-size:12px; color:var(--sub); }
   .sum-foot .held-sum { color:var(--acc); font-weight:600; }
   .chev::after { content:"상세 보기 ▾"; } details.card[open] .chev::after { content:"접기 ▴"; }
-  .gridtools { display:flex; gap:6px; margin-bottom:10px; }
+  .gridtools { display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap; align-items:center; }
+  .gridtools .sep { width:1px; height:20px; background:var(--line); margin:0 4px; }
+  .tag.good { background:color-mix(in srgb,var(--good) 16%,transparent); color:var(--good); font-weight:600; }
+  .tag.warn { background:color-mix(in srgb,var(--warn) 16%,transparent); color:var(--warn); }
+  .modenote { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px; font-size:13.5px; color:var(--sub); margin-bottom:12px; }
   .rank { display:flex; align-items:center; gap:8px; margin-bottom:4px; }
   .rank .no { font-size:12px; color:var(--sub); font-variant-numeric:tabular-nums; }
   .score { font-weight:700; font-size:20px; font-variant-numeric:tabular-nums; }
@@ -100,6 +104,9 @@
   .lv strong { display:block; font-size:13.5px; color:var(--text); font-variant-numeric:tabular-nums; }
   .lv .buy strong { color:var(--up); } .lv .stop strong { color:var(--down); }
   .plan small { color:var(--sub); }
+  .chart { width:100%; height:auto; display:block; margin:8px 0 2px; }
+  .legend { font-size:11.5px; color:var(--sub); display:flex; flex-wrap:wrap; gap:2px 12px; margin-bottom:8px; }
+  .tmr { font-size:12.5px; margin:6px 0; padding:6px 8px; border-radius:6px; background:var(--card); border:1px dashed var(--acc); }
   details.more { margin-top:4px; font-size:13px; }
   details.more > summary { cursor:pointer; color:var(--acc); font-size:12.5px; padding:2px 0; }
   details.more dl { margin:6px 0 2px; }
@@ -159,7 +166,7 @@
 <body>
 <div class="wrap">
   <h1>유목민 주도주 분석</h1>
-  <div class="sub">재·차·거·시 기반 스크리닝 · 점수 상위 10개 · 매수/매도가 산정 이유 포함</div>
+  <div class="sub">오늘 마감 데이터 기준 · 내일 매수 후보 상위 10개 · 매수/매도가 산정 이유 포함</div>
 
   <div class="status" id="status"></div>
 
@@ -190,12 +197,14 @@
       <ul>
         <li>타점 30 · 손익비 20 · 손절폭 10 · 주도성 15 · 재료 10 · 시황 10 · 추세 5</li>
         <li>시황은 그 종목의 업종과 소속 테마가 오늘 얼마나 올랐는지(상위 업종·테마인지)로 봅니다.</li>
+        <li>눌림목은 거래량 감소폭이 크고 음봉이 클수록, 5일선과 이격이 작을수록, 거래대금이 터진 뒤 1~2일차일수록 타점 점수에 가산됩니다. 5일선을 3% 넘게 깨면 제외합니다.</li>
         <li>A 75점 이상 · B 60점 이상 · C 45점 이상 · D 그 아래</li>
       </ul>
       <h3>주의</h3>
       <ul><li>점수는 조건이 얼마나 갖춰졌는지 보는 규칙 기반 지표이며 수익을 예측하지 않습니다. 투자 판단과 책임은 본인에게 있습니다.</li></ul>
     </details>
-    <div class="gridtools"><button class="btn ghost small" id="open-all">모두 펼치기</button><button class="btn ghost small" id="close-all">모두 접기</button></div>
+    <div class="gridtools"><button class="btn small" id="m-pull">눌림목</button><button class="btn ghost small" id="m-all">전체</button><span class="sep"></span><button class="btn ghost small" id="open-all">모두 펼치기</button><button class="btn ghost small" id="close-all">모두 접기</button></div>
+    <div id="modenote"></div>
     <div class="grid" id="grid"></div>
     <p class="note-foot">참고용 자동 분석입니다. 투자 판단과 책임은 본인에게 있습니다.</p>
   </section>
@@ -282,7 +291,12 @@ function renderStatus() {
 }
 
 /* ───────── TOP 10 카드 ───────── */
+function tick(v) {   // 한국 주식 호가단위로 맞추기
+  const t = [[2000, 1], [5000, 5], [20000, 10], [50000, 50], [200000, 100], [500000, 500]].find(x => v < x[0]);
+  const u = t ? t[1] : 1000; return Math.round(v / u) * u;
+}
 function planHtml(k, p) {
+  const lo = tick(Math.max(p.stop, p.entry * 0.97)), hi = tick(p.entry * 1.03);
   const r = p.reasons || {};
   return `<div class="plan"><b>${esc(k)}</b> · ${esc(p.how)}
     <div class="lv">
@@ -291,6 +305,7 @@ function planHtml(k, p) {
       <div>1차 목표<strong>${won(p.target1)}</strong></div>
       <div>2차 목표<strong>${won(p.target2)}</strong></div>
     </div>
+    <div class="tmr"><b>내일 매수 조건</b> 시가가 <b>${won(lo)}~${won(hi)}원</b>이면 매수 · ${won(lo)}원 아래로 출발하면 지지 이탈이라 보류 · ${won(hi)}원을 넘게 갭상승하면 추격하지 말고 눌림을 기다립니다.</div>
     <small>손익비 ${p.rr} · ${esc(p.exit_rule)}</small>
     ${r.entry ? `<details class="more"><summary>가격 산정 이유</summary><dl>
       <dt>매수 ${won(p.entry)}원</dt><dd>${esc(r.entry)}</dd>
@@ -307,17 +322,63 @@ function scoreHtml(s) {
     <p>${esc(d.reason)}</p></div>`).join("");
   return rows ? `<details class="more"><summary>점수 상세 (왜 ${s.score}점인가)</summary>${rows}${s.score_note ? `<p class="sub" style="margin:8px 0 0"><b>${esc(s.score_note)}</b></p>` : ""}</details>` : "";
 }
+function chartSvg(s) {
+  const c = s.chart; if (!c || !c.c || c.c.length < 10) return "";
+  const n = c.c.length, W = 340, ml = 4, mr = 68, top = 8, ph = 150, gap = 10, vh = 34, H = top + ph + gap + vh + 4;
+  const p = Object.values(s.plans)[0];
+  const hi20 = Math.max(...c.h.slice(Math.max(0, n - 21), n - 1));
+  const mn = Math.min(...c.l, p.stop) * 0.99, mx = Math.max(...c.h, p.target1, hi20) * 1.01;
+  const x = i => ml + (W - ml - mr) * (i + 0.5) / n;
+  const y = v => top + ph * (1 - (v - mn) / (mx - mn));
+  const bw = Math.max(1.6, (W - ml - mr) / n * 0.62);
+  const vmax = Math.max(...c.v) || 1, vy0 = top + ph + gap + vh;
+  const baseIdx = s.base ? c.d.indexOf(s.base.date) : -1;
+  const lo = tick(Math.max(p.stop, p.entry * 0.97)), hi = tick(p.entry * 1.03);
+  let g = `<rect x="${x(n - 1).toFixed(1)}" y="${y(hi).toFixed(1)}" width="${(W - mr - x(n - 1)).toFixed(1)}" height="${Math.max(2, y(lo) - y(hi)).toFixed(1)}" style="fill:var(--acc);opacity:.22"/>`;
+  for (let i = 0; i < n; i++) {
+    const col = c.c[i] >= c.o[i] ? "var(--up)" : "var(--down)";
+    const y1 = y(Math.max(c.o[i], c.c[i])), y2 = y(Math.min(c.o[i], c.c[i])), vh_ = c.v[i] / vmax * vh;
+    g += `<line x1="${x(i).toFixed(1)}" x2="${x(i).toFixed(1)}" y1="${y(c.h[i]).toFixed(1)}" y2="${y(c.l[i]).toFixed(1)}" style="stroke:${col}" stroke-width="1"/>`;
+    g += `<rect x="${(x(i) - bw / 2).toFixed(1)}" y="${y1.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1, y2 - y1).toFixed(1)}" style="fill:${col}"/>`;
+    g += `<rect x="${(x(i) - bw / 2).toFixed(1)}" y="${(vy0 - vh_).toFixed(1)}" width="${bw.toFixed(1)}" height="${vh_.toFixed(1)}" style="fill:${col};opacity:${i === baseIdx ? 1 : 0.4}"/>`;
+  }
+  const path = (arr, color) => { let d = ""; arr.forEach((v, i) => { if (v != null) d += (d ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1); }); return d ? `<path d="${d}" style="fill:none;stroke:${color}" stroke-width="1.3"/>` : ""; };
+  g += path(c.m5, "#f59e0b") + path(c.m20, "#3b82f6") + path(c.m60, "#22c55e");
+  const hl = [{ v: p.target1, col: "var(--good)", t: "1차 " + won(p.target1) }, { v: hi20, col: "var(--sub)", t: "저항 " + won(hi20) },
+              { v: p.entry, col: "var(--up)", t: "매수 " + won(p.entry) }, { v: p.stop, col: "var(--down)", t: "손절 " + won(p.stop) }].sort((a, b) => b.v - a.v);
+  let lastY = -99;
+  hl.forEach(l => {
+    const yy = y(l.v), ty = Math.max(yy + 3, lastY + 11); lastY = ty;
+    g += `<line x1="${ml}" x2="${W - mr}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}" style="stroke:${l.col}" stroke-dasharray="4 3" stroke-width="1"/>`;
+    g += `<text x="${W - mr + 3}" y="${ty.toFixed(1)}" font-size="9.5" style="fill:${l.col}">${l.t}</text>`;
+  });
+  if (baseIdx >= 0) g += `<text x="${x(baseIdx).toFixed(1)}" y="${(y(c.h[baseIdx]) - 3).toFixed(1)}" font-size="9" text-anchor="middle" style="fill:var(--warn)">기준봉</text>`;
+  g += `<text x="${x(n - 1).toFixed(1)}" y="${(y(c.h[n - 1]) - 3).toFixed(1)}" font-size="9" text-anchor="end" style="fill:var(--sub)">오늘</text>`;
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(s.name)} 일봉 차트">${g}</svg>` +
+    `<div class="legend"><span style="color:#f59e0b">━ 5일선</span><span style="color:#3b82f6">━ 20일선</span><span style="color:#22c55e">━ 60일선</span><span style="color:var(--acc)">▮ 내일 매수 구간</span><span>진한 거래량 막대 = 기준봉</span></div>`;
+}
 function marketHtml(s) {
   const m = s.market || {}, i = m.industry, t = m.theme;
   if (!i && !t) return "";
   return `<div class="meta" style="margin-top:-2px">${i ? `업종 ${esc(i.name)} <b class="${i.rate >= 0 ? "up" : "down"}">${pct(i.rate)}</b> (${i.count}개 중 ${i.rank}위)` : ""}${i && t ? " · " : ""}${t ? `테마 ${esc(t.name)} <b class="${t.rate >= 0 ? "up" : "down"}">${pct(t.rate)}</b> (${t.rise}/${t.total} 상승)` : ""}</div>`;
 }
+let mode = "pullback", shown = [];
+try { if (localStorage.getItem("nomad.mode") === "all") mode = "all"; } catch (e) {}
+const CHASE = ["갭상승 양봉", "바닥주 224일선 돌파", "1일차 장대음봉 지지"];
+function setMode(m) { mode = m; try { localStorage.setItem("nomad.mode", m); } catch (e) {} renderTop(); }
 function renderTop() {
   if (!data) { $("grid").innerHTML = '<div class="empty">아직 결과가 없습니다.</div>'; return; }
-  const list = data.stocks.slice(0, 10);
+  const all = data.stocks, pull = all.filter(s => s.pullback);
+  const list = (mode === "pullback" ? pull : all).slice(0, 10);
+  shown = list;
+  $("m-pull").textContent = `눌림목 (${pull.length})`; $("m-all").textContent = `전체 (${all.length})`;
+  $("m-pull").className = "btn small" + (mode === "pullback" ? "" : " ghost"); $("m-all").className = "btn small" + (mode === "all" ? "" : " ghost");
+  $("modenote").innerHTML = mode === "pullback"
+    ? `<div class="modenote"><b>눌림목</b>: 최근 3일 안에 거래량(거래대금 500억)이 터져 상승한 뒤, <b>거래량이 마르는 음봉</b>이 3·5·8일선 등 지지선에서 받치는 종목만 보여줍니다. 거래량 폭발이나 돌파 직후를 추격하는 종목은 "전체"에 있습니다.</div>`
+    : `<div class="modenote"><b>전체</b>: 눌림목(초록 태그)과 함께 갭상승 양봉·바닥주 돌파·1일차 장대음봉 같은 <b>추격형(주황 태그)</b>, 그리고 기준일이 4일 이상 지난 후속 눌림도 포함합니다.</div>`;
   $("grid").innerHTML = list.length ? list.map((s, i) => {
     const p0 = Object.values(s.plans)[0];
-    const tags = Object.keys(s.setups).map(k => `<span class="tag">${esc(k)}</span>`).join("") +
+    const tags = (s.pullback ? `<span class="tag good">눌림목</span>` : "") + Object.keys(s.setups).map(k => `<span class="tag${CHASE.includes(k) ? " warn" : ""}">${esc(k)}${CHASE.includes(k) ? " (추격형)" : ""}</span>`).join("") +
       s.keywords.map(k => `<span class="tag kw">#${esc(k)}</span>`).join("") +
       (s.leader_hits ? `<span class="tag kw">대장주 언급 ${s.leader_hits}건</span>` : "");
     return `
@@ -335,6 +396,7 @@ function renderTop() {
       <div class="detail">
         <div class="meta">${esc(s.code)} · 거래량 ${won(s.volume)} · RSI ${s.rsi.toFixed(1)} · ${esc(s.sources.join(", "))}${s.base ? ` · 기준 거래대금 ${s.base.value_eok.toLocaleString("ko-KR")}억(${s.base.days_ago}일 전)` : ""}</div>
         ${marketHtml(s)}
+        ${chartSvg(s)}
         ${Object.entries(s.plans).map(([k, p]) => planHtml(k, p)).join("")}
         ${scoreHtml(s)}
         <div class="news">${(s.leader_news || []).map(a => `<a href="${esc(a.link)}" target="_blank" rel="noopener"><small>대장주</small>${esc(a.title)}</a>`).join("")}${s.news.slice(0, 3).map(a => `<a href="${esc(a.link)}" target="_blank" rel="noopener"><small>${esc(a.source)}</small>${esc(a.title)}</a>`).join("")}</div>
@@ -350,7 +412,7 @@ function renderTop() {
           <div class="qmsg"></div>
         </div>
       </div>
-    </details>`; }).join("") : '<div class="empty">오늘은 조건에 맞는 종목이 없습니다.</div>';
+    </details>`; }).join("") : (mode === "pullback" ? `<div class="empty">오늘은 조건에 맞는 눌림목 종목이 없습니다.<br>거래량이 마르는 음봉이 지지선에서 받치는 종목이 없다는 뜻입니다.<br><button class="btn small" id="go-all" style="margin-top:10px">전체 보기 (${all.length}개)</button></div>` : '<div class="empty">오늘은 조건에 맞는 종목이 없습니다.</div>');
   $("j-names").innerHTML = list.map(s => `<option value="${esc(s.name)}">`).join("");
 }
 
@@ -527,11 +589,14 @@ function showTab(name) {
   $("tab-top").setAttribute("aria-selected", name === "top"); $("tab-journal").setAttribute("aria-selected", name === "journal");
 }
 document.querySelector(".tabs").onclick = e => { const t = e.target.dataset.tab; if (t) showTab(t); };
+$("m-pull").onclick = () => setMode("pullback");
+$("m-all").onclick = () => setMode("all");
 $("open-all").onclick = () => document.querySelectorAll("details.card").forEach(d => d.open = true);
 $("close-all").onclick = () => document.querySelectorAll("details.card").forEach(d => d.open = false);
 $("grid").onclick = e => {
+  if (e.target.id === "go-all") return setMode("all");
   const side = e.target.dataset.q; if (!side) return;
-  const box = e.target.closest(".quick"), s = data.stocks[+box.dataset.i], out = box.querySelector(".qmsg");
+  const box = e.target.closest(".quick"), s = shown[+box.dataset.i], out = box.querySelector(".qmsg");
   const say = (t, cls) => { out.textContent = t; out.className = "qmsg " + cls; };
   const qty = Math.floor(+box.querySelector(".q-qty").value), price = +box.querySelector(".q-price").value;
   if (!(qty > 0)) return say("수량(주)을 입력하세요.", "err");

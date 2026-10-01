@@ -15,10 +15,25 @@ def score_detail(s):
 
     # 1) 타점 (30점)
     pts = {k: SETUP_POINTS.get(k, 8) for k in s["setups"]}
-    setup = min(30, sum(pts.values()))
     listing = " + ".join(f"{k} {v}점" for k, v in pts.items())
+    bonus, btxt = 0, ""
+    pq = s.get("pq")
+    if s.get("pullback") and pq:
+        parts = []
+        r = pq["vol_ratio"]
+        vb = 3 if r <= 0.10 else 2 if r <= 0.20 else 1 if r <= 0.30 else 0
+        parts.append(f"거래량 감소 {r:.0%}로 급감 +{vb}")
+        bb = 2 if pq["body_pct"] >= 3 else 1 if pq["body_pct"] >= 1.5 else 0
+        parts.append(f"음봉 몸통 {pq['body_pct']:.1f}% +{bb}")
+        gb = 1 if -1.0 <= pq["gap5"] <= 2.0 else 0
+        parts.append(f"5일선 이격 {pq['gap5']:+.1f}% +{gb}")
+        db = 2 if pq["days_ago"] <= 2 else 1
+        parts.append(f"거래대금 터진 뒤 {pq['days_ago']}일차 +{db}")
+        bonus = vb + bb + gb + db
+        btxt = " 눌림목 완성도 가산: " + ", ".join(parts) + f" = +{bonus}점."
+    setup = min(30, sum(pts.values()) + bonus)
     out.append({"name": "타점", "max": 30, "score": setup,
-                "reason": f"{listing} = {sum(pts.values())}점 (최대 30점). 서로 다른 타점이 겹칠수록 신뢰도가 높다고 봅니다."})
+                "reason": f"{listing} = {sum(pts.values())}점.{btxt} 합계 {setup}점(최대 30점). 서로 다른 타점이 겹칠수록 신뢰도가 높다고 봅니다."})
 
     # 2) 손익비 (25점)
     best = max(plans.items(), key=lambda kv: kv[1]["rr"])

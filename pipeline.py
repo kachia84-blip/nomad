@@ -10,6 +10,11 @@ import collector, indicators, screener, news, report, trade_plan, scoring
 RESULT_FILE = os.path.join(report.REPORT_DIR, "latest.json")
 
 
+def _plain(o):
+    """numpy 숫자/참거짓 같은 값을 JSON에 쓸 수 있는 일반 값으로 바꾼다."""
+    return o.item() if hasattr(o, "item") else str(o)
+
+
 def run_pipeline(log, progress, manual=None):
     """log(글자), progress(현재, 전체) 콜백으로 진행 상황을 알린다."""
     candidates = collector.collect_candidates(log)
@@ -34,7 +39,7 @@ def run_pipeline(log, progress, manual=None):
             continue
         if setups:
             last = df.iloc[-1]
-            picked.append({**c, "base": base, "setups": setups, "plans": trade_plan.make_plans(setups, df), "rsi": float(last["rsi"]),
+            picked.append({**c, "base": base, "setups": setups, "pullback": screener.is_pullback(df, base, setups), "pq": screener.pullback_quality(df, base) if base else None, "chart": indicators.chart_data(df), "plans": trade_plan.make_plans(setups, df), "rsi": float(last["rsi"]),
                            **{f"ma{n}": float(last[f"ma{n}"]) for n in (3, 5, 8, 45)}})
             log(f"✔ {c['name']} → {', '.join(setups)}")
 
@@ -49,7 +54,7 @@ def run_pipeline(log, progress, manual=None):
     market.attach_market(picked, log)       # 업종·테마 시황
     picked = scoring.apply_scores(picked)  # 100점 만점 점수 → 높은 순 정렬
     screened = len(picked)
-    picked = picked[: config.SHOW_TOP_N]    # 상위 N개만 남김
+    picked = picked[: config.STORE_TOP_N]    # 상위 N개만 저장 (화면에는 눌림목/전체 각각 상위 10개를 보여줌)
     result = {
         "date": datetime.now().strftime("%Y-%m-%d"),
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -58,9 +63,12 @@ def run_pipeline(log, progress, manual=None):
         "prices": {c["name"]: c["price"] for c in candidates},  # 후보 전체의 현재가 (보유 종목 평가용)
         "stocks": picked,
     }
+    payload = json.dumps(result, ensure_ascii=False, default=_plain)   # 먼저 문자열로 만들어, 실패해도 기존 파일이 깨지지 않게 한다
     report.save_report(result)
-    with open(RESULT_FILE, "w", encoding="utf-8") as f:
-        json.dump(result, f, ensure_ascii=False)
+    tmp = RESULT_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(payload)
+    os.replace(tmp, RESULT_FILE)                                          # 한 번에 교체
     progress(1, 1)
     log(f"완료: 타점 종목 {len(picked)}개, 보고서 저장됨")
     return result

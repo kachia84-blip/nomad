@@ -76,7 +76,7 @@ def find_base(df):
     i, kind = best
     r = df.iloc[i]
     return {"date": str(r["date"]), "value_eok": int(round(value.iloc[i] / 1e8)), "days_ago": n - 1 - i, "kind": kind,
-            "close": float(r["close"]), "volume": float(r["volume"])}
+            "open": float(r["open"]), "close": float(r["close"]), "volume": float(r["volume"])}
 
 
 def find_base_today(df):
@@ -85,7 +85,7 @@ def find_base_today(df):
     v = r["close"] * r["volume"]
     if r["close"] > r["open"] and v >= config.BASE_TRADE_VALUE:
         return {"date": str(r["date"]), "value_eok": int(round(v / 1e8)), "days_ago": 0, "kind": "500억",
-                "close": float(r["close"]), "volume": float(r["volume"])}
+                "open": float(r["open"]), "close": float(r["close"]), "volume": float(r["volume"])}
     return None
 
 
@@ -137,19 +137,26 @@ def first_day_big_bear(df, base):
     return ok, f"기준일 다음 날 장대 음봉(몸통 {body:.1f}%)이지만 종가가 {'·'.join(held) or '지지선'}을 지킴 (거래량 증가는 무방)"
 
 
-def dry_bear_support(df, base):
-    """[거감음봉 지지] 기준일 이후, 거래량이 마르는 음봉이 3일선(첫 조정) → 8일선 → 15·20일선에서 지지받는 자리.
-    영상의 거래량 법칙: 전일 대비 25% 이하로 급감한 음봉이며, 5일선과 이격이 크지 않아야 한다."""
+def dry_bear_support(df, base, mas=(3, 5, 8, 15, 20, 45)):
+    """[거감음봉 지지] 기준일 이후, 거래량이 마르는 음봉이 3·5·8일선(15·20·45일선)에서 지지받는 자리 = 눌림목.
+    거래량이 마른다는 기준(아래 중 하나): 전일 대비 25% 이하 / 최근 5일 상승일 최대 거래량 대비 30% 이하 / 기준일 대비 40% 이하.
+    거래량이 터지면서 떨어지는 음봉은 탈출 신호라 제외한다. 15일선 이내에서는 5일선과의 이격이 크지 않아야 한다."""
     t, y = df.iloc[-1], df.iloc[-2]
     ratio = t["volume"] / y["volume"] if y["volume"] > 0 else 1
     vs_base = t["volume"] / base["volume"] if base["volume"] > 0 else 1
-    dry = ratio <= config.VOL_DROP_RATIO or vs_base <= config.DRY_VS_BASE
+    ups = df.iloc[-6:-1]
+    ups = ups[ups["close"] > ups["open"]]
+    peak = float(ups["volume"].max()) if len(ups) else 0.0
+    vs_peak = t["volume"] / peak if peak > 0 else 1
+    dry = ratio <= config.VOL_DROP_RATIO or vs_peak <= 0.30 or vs_base <= config.DRY_VS_BASE
     gap5 = (t["close"] / t["ma5"] - 1) * 100 if t["ma5"] == t["ma5"] and t["ma5"] else 0
-    sup = [n for n in (3, 8, 15, 20) if t[f"ma{n}"] == t[f"ma{n}"]
+    sup = [n for n in mas if t[f"ma{n}"] == t[f"ma{n}"]
            and t["low"] <= t[f"ma{n}"] * 1.01 and t["close"] >= t[f"ma{n}"] * 0.98]
-    ok = bool(t["close"] < t["open"] and dry and sup and abs(gap5) <= config.MA5_GAP_MAX_PCT)
     n = sup[0] if sup else 3
-    return ok, f"음봉, 거래량 전일 대비 {ratio:.0%}·기준일 대비 {vs_base:.0%}, 5일선 이격 {gap5:+.1f}%, {n}일선 {t[f'ma{n}']:,.0f}원 지지"
+    near_ok = n >= 45 or (-config.MA5_BREAK_MAX_PCT <= gap5 <= config.MA5_GAP_MAX_PCT)   # 5일선과 이격이 작고, 크게 깨지 않을 것
+    ok = bool(t["close"] < t["open"] and dry and sup and near_ok)
+    return ok, (f"음봉, 거래량 전일 대비 {ratio:.0%}·최근 상승일 최대 대비 {vs_peak:.0%}·기준일 대비 {vs_base:.0%}, "
+                f"5일선 이격 {gap5:+.1f}%, {n}일선 {t[f'ma{n}']:,.0f}원 지지")
 
 
 SETUPS = {
@@ -159,10 +166,13 @@ SETUPS = {
     "RSI 추세 전환": rsi_reversal,
 }
 
+PULLBACK = "거감음봉 지지"                       # 눌림목 타점 이름
+CHASE = ("갭상승 양봉", "바닥주 224일선 돌파", "1일차 장대음봉 지지")   # 거래량 폭발·돌파 직후 매수하는 추격형
+
 
 def classify(df, base):
     """타점을 검사해 {타점이름: 설명} 로 반환. 기준 거래대금이 터진 종목(base)만 대상입니다.
-    20일선 아래(3% 넘게)에 있는 종목은 낙주(45일선 눌림)를 빼고 제외합니다.
+    20일선 아래(3% 넘게)에 있는 종목은 45일선 눌림(낙주·거감음봉 지지의 45일선)만 남깁니다.
     base 가 '오늘'(days_ago 0)이면 바닥주 224일선 돌파만 검사합니다(기준일 다음 날부터가 다른 타점의 자리)."""
     if len(df) < 20 or base is None:
         return {}
@@ -175,12 +185,17 @@ def classify(df, base):
     t = df.iloc[-1]
     above20 = t["ma20"] != t["ma20"] or t["close"] >= t["ma20"] * 0.97
     if above20:
-        for name, func in (("갭상승 양봉", gap_up_candle), ("1일차 장대음봉 지지", first_day_big_bear), ("거감음봉 지지", dry_bear_support)):
+        for name, func in (("갭상승 양봉", gap_up_candle), ("1일차 장대음봉 지지", first_day_big_bear)):
             ok, note = func(df, base)
             if ok:
                 found[name] = note
+        ok, note = dry_bear_support(df, base)
+    else:
+        ok, note = dry_bear_support(df, base, mas=(45,))
+    if ok:
+        found[PULLBACK] = note
     for name, func in SETUPS.items():
-        if name == "거감음봉" and "거감음봉 지지" in found:
+        if name == "거감음봉" and PULLBACK in found:
             continue                                   # 같은 신호를 두 번 세지 않음
         if name != "낙주" and not above20:
             continue
@@ -188,3 +203,25 @@ def classify(df, base):
         if ok:
             found[name] = note
     return found
+
+
+def pullback_quality(df, base):
+    """눌림목의 완성도 지표. 거래량 감소폭이 클수록, 음봉이 클수록, 5일선 이격이 작을수록, 기준일 1~2일차일수록 좋다."""
+    t, y = df.iloc[-1], df.iloc[-2]
+    ratio = t["volume"] / y["volume"] if y["volume"] > 0 else 1
+    ups = df.iloc[-6:-1]
+    ups = ups[ups["close"] > ups["open"]]
+    peak = float(ups["volume"].max()) if len(ups) else 0.0
+    vs_peak = t["volume"] / peak if peak > 0 else 1
+    body = (t["open"] - t["close"]) / t["open"] * 100 if t["open"] else 0
+    gap5 = (t["close"] / t["ma5"] - 1) * 100 if t["ma5"] == t["ma5"] and t["ma5"] else 0
+    return {"vol_ratio": round(float(min(ratio, vs_peak)), 3), "body_pct": round(float(body), 2),
+            "gap5": round(float(gap5), 2), "days_ago": int(base["days_ago"])}
+
+
+def is_pullback(df, base, setups):
+    """눌림목: 기준 거래대금이 최근 PULLBACK_BASE_MAX_DAYS일 안에 터져 상승한 뒤,
+    거래량이 마르는 음봉이 지지선에서 받치고, 종가가 기준봉 시가 위에서 눌린 자리."""
+    if base is None or PULLBACK not in setups:
+        return False
+    return bool(1 <= base["days_ago"] <= config.PULLBACK_BASE_MAX_DAYS and df.iloc[-1]["close"] >= base.get("open", 0))
