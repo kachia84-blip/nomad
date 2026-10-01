@@ -4,7 +4,7 @@
 def add_indicators(df):
     """일봉 표에 이평선과 RSI 열을 붙여서 돌려준다."""
     df = df.copy()
-    for n in (3, 5, 8, 15, 20, 45):
+    for n in (3, 5, 8, 15, 20, 45, 224):
         df[f"ma{n}"] = df["close"].rolling(n).mean()
 
     # RSI(14): 와일더 방식 (상승폭/하락폭의 지수이동평균)

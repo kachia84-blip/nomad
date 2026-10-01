@@ -114,11 +114,17 @@ def resolve_manual(entries, log):
 
 
 def fetch_daily(code, days=config.HISTORY_DAYS):
-    """종목의 일봉(날짜/시가/고가/저가/종가/거래량)을 오래된 날짜부터 정렬해 반환."""
-    rows = get_json(f"{BASE}/stock/{code}/price", {"pageSize": days, "page": 1})
+    """종목의 일봉(날짜/시가/고가/저가/종가/거래량)을 오래된 날짜부터 정렬해 반환.
+    네이버는 한 번에 최대 60일치만 주므로 페이지를 나눠 받는다."""
+    rows = []
+    for page in range(1, (days + 59) // 60 + 1):
+        got = get_json(f"{BASE}/stock/{code}/price", {"pageSize": 60, "page": page})
+        rows += got
+        if len(got) < 60:          # 상장한 지 얼마 안 된 종목은 여기서 끝
+            break
     df = pd.DataFrame([{
         "date": r["localTradedAt"], "close": to_number(r["closePrice"]), "open": to_number(r["openPrice"]),
         "high": to_number(r["highPrice"]), "low": to_number(r["lowPrice"]),
         "volume": to_number(r["accumulatedTradingVolume"]),
-    } for r in rows])
-    return df.sort_values("date").reset_index(drop=True)
+    } for r in rows]).drop_duplicates("date")
+    return df.sort_values("date").reset_index(drop=True).tail(days)

@@ -60,6 +60,23 @@
   /* 종목 카드 */
   .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr)); gap:12px; align-items:start; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; min-width:0; }
+  details.card { padding:0; }
+  details.card > summary { list-style:none; cursor:pointer; padding:12px 14px; display:block; }
+  details.card > summary::-webkit-details-marker { display:none; }
+  details.card > summary:hover { background:color-mix(in srgb,var(--acc) 5%,transparent); border-radius:12px; }
+  details.card[open] > summary { border-bottom:1px solid var(--line); border-radius:12px 12px 0 0; }
+  details.card .detail { padding:12px 14px 14px; }
+  .sum-top { display:flex; align-items:center; gap:7px; flex-wrap:wrap; margin-bottom:6px; }
+  .sum-top .no { font-size:12px; color:var(--sub); min-width:16px; font-variant-numeric:tabular-nums; }
+  .sum-top .name { font-weight:700; font-size:16px; }
+  .sum-top .score { font-weight:700; font-size:16px; font-variant-numeric:tabular-nums; }
+  .sum-top .price { margin-left:auto; font-size:14px; }
+  .sum-lv { display:flex; flex-wrap:wrap; gap:4px 12px; font-size:13px; font-variant-numeric:tabular-nums; color:var(--sub); }
+  .sum-lv .buy { color:var(--up); font-weight:600; } .sum-lv .stop { color:var(--down); font-weight:600; }
+  .sum-foot { display:flex; justify-content:space-between; align-items:center; margin-top:6px; font-size:12px; color:var(--sub); }
+  .sum-foot .held-sum { color:var(--acc); font-weight:600; }
+  .chev::after { content:"상세 보기 ▾"; } details.card[open] .chev::after { content:"접기 ▴"; }
+  .gridtools { display:flex; gap:6px; margin-bottom:10px; }
   .rank { display:flex; align-items:center; gap:8px; margin-bottom:4px; }
   .rank .no { font-size:12px; color:var(--sub); font-variant-numeric:tabular-nums; }
   .score { font-weight:700; font-size:20px; font-variant-numeric:tabular-nums; }
@@ -163,8 +180,8 @@
       <summary>활용법 · 점수 기준</summary>
       <h3>보는 순서</h3>
       <ol>
-        <li>점수 높은 순입니다. 핵심 타점(갭상승 양봉·1일차 장대음봉 지지·거감음봉 지지)이 없는 종목은 15점 감점됩니다. 위에서부터 보고, D등급은 참고만 하세요. 모든 종목은 <b>최근 15일 안에 일봉 거래대금 500억 이상 양봉(기준 거래대금, 150억은 상승 추세일 때만)</b>이 터진 종목이고, 20일선 위에 있는 종목입니다.</li>
-        <li>카드의 <b>타점 태그</b>로 어떤 자리인지 확인합니다. 핵심은 <b>갭상승 양봉</b>, <b>1일차 장대음봉 지지</b>(500억 다음 날 장대 음봉이 지지선을 지킴), <b>거감음봉 지지</b>(거래량 마른 음봉이 3·8·15·20일선에서 지지)입니다.</li>
+        <li>점수 높은 순입니다. 핵심 타점(바닥주 224일선 돌파·갭상승 양봉·1일차 장대음봉 지지·거감음봉 지지)이 없는 종목은 15점 감점됩니다. 위에서부터 보고, D등급은 참고만 하세요. 모든 종목은 <b>최근 15일 안에 일봉 거래대금 500억 이상 양봉(기준 거래대금, 150억은 상승 추세일 때만)</b>이 터진 종목이고, 20일선 위에 있는 종목입니다.</li>
+        <li>카드의 <b>타점 태그</b>로 어떤 자리인지 확인합니다. 핵심은 <b>바닥주 224일선 돌파</b>(224일선 아래에서 눌려 있던 종목이 거래대금과 함께 돌파), <b>갭상승 양봉</b>, <b>1일차 장대음봉 지지</b>(500억 다음 날 장대 음봉이 지지선을 지킴), <b>거감음봉 지지</b>(거래량 마른 음봉이 3·8·15·20일선에서 지지)입니다.</li>
         <li><b>매수·손절·목표가</b>를 장 시작 전에 주문 계획으로 적어 둡니다. "산정 이유"에서 그 가격의 근거를 확인하세요.</li>
         <li>"점수 상세"에서 각 점수가 왜 그렇게 나왔는지 봅니다.</li>
         <li>실제로 매매했다면 <b>매매일지</b> 탭에 기록하세요. 총 수익률과 손익비가 계산됩니다.</li>
@@ -177,6 +194,7 @@
       <h3>주의</h3>
       <ul><li>점수는 조건이 얼마나 갖춰졌는지 보는 규칙 기반 지표이며 수익을 예측하지 않습니다. 투자 판단과 책임은 본인에게 있습니다.</li></ul>
     </details>
+    <div class="gridtools"><button class="btn ghost small" id="open-all">모두 펼치기</button><button class="btn ghost small" id="close-all">모두 접기</button></div>
     <div class="grid" id="grid"></div>
     <p class="note-foot">참고용 자동 분석입니다. 투자 판단과 책임은 본인에게 있습니다.</p>
   </section>
@@ -291,31 +309,41 @@ function scoreHtml(s) {
 function renderTop() {
   if (!data) { $("grid").innerHTML = '<div class="empty">아직 결과가 없습니다.</div>'; return; }
   const list = data.stocks.slice(0, 10);
-  $("grid").innerHTML = list.length ? list.map((s, i) => `
-    <div class="card">
-      <div class="rank"><span class="no">${i + 1}위</span><span class="score">${s.score}<small>/100</small></span><span class="grade ${s.grade}">${s.grade}</span></div>
-      <div class="head">
-        <div><span class="name">${esc(s.name)}</span><span class="code">${esc(s.code)}</span></div>
-        <div class="price"><b>${won(s.price)}</b> <span class="${s.rate >= 0 ? "up" : "down"}">${pct(s.rate)}</span></div>
-      </div>
-      <div class="meta">거래량 ${won(s.volume)} · RSI ${s.rsi.toFixed(1)} · ${esc(s.sources.join(", "))}${s.base ? ` · 기준 거래대금 ${s.base.value_eok.toLocaleString("ko-KR")}억(${s.base.days_ago}일 전)` : ""}</div>
-      <div class="tags">${Object.keys(s.setups).map(k => `<span class="tag">${esc(k)}</span>`).join("")}
-        ${s.keywords.map(k => `<span class="tag kw">#${esc(k)}</span>`).join("")}</div>
-      ${Object.entries(s.plans).map(([k, p]) => planHtml(k, p)).join("")}
-      ${scoreHtml(s)}
-      <div class="news">${s.news.slice(0, 3).map(a => `<a href="${esc(a.link)}" target="_blank" rel="noopener"><small>${esc(a.source)}</small>${esc(a.title)}</a>`).join("")}</div>
-      <div class="quick" data-i="${i}">
-        <div class="held" data-held="${esc(s.name)}"></div>
-        <div class="hint">내가 실제로 거래했다면 수량과 체결가를 넣고 바로 기록하세요 (체결가는 계획 매수가로 채워져 있으니 실제 가격으로 고치세요).</div>
-        <div class="qrow">
-          <input class="q-qty" type="number" min="1" step="1" inputmode="numeric" placeholder="수량(주)" aria-label="수량">
-          <input class="q-price" type="number" min="0" step="1" inputmode="numeric" value="${Object.values(s.plans)[0].entry}" aria-label="체결가">
-          <button class="btn small" data-q="buy">매수 기록</button>
-          <button class="btn ghost small" data-q="sell">매도 기록</button>
+  $("grid").innerHTML = list.length ? list.map((s, i) => {
+    const p0 = Object.values(s.plans)[0];
+    const tags = Object.keys(s.setups).map(k => `<span class="tag">${esc(k)}</span>`).join("") +
+      s.keywords.map(k => `<span class="tag kw">#${esc(k)}</span>`).join("") +
+      (s.leader_hits ? `<span class="tag kw">대장주 언급 ${s.leader_hits}건</span>` : "");
+    return `
+    <details class="card">
+      <summary>
+        <div class="sum-top">
+          <span class="no">${i + 1}</span><span class="name">${esc(s.name)}</span>
+          <span class="grade ${s.grade}">${s.grade}</span><span class="score">${s.score}점</span>
+          <span class="price"><b>${won(s.price)}</b> <span class="${s.rate >= 0 ? "up" : "down"}">${pct(s.rate)}</span></span>
         </div>
-        <div class="qmsg"></div>
+        <div class="tags">${tags}</div>
+        <div class="sum-lv"><span class="buy">매수 ${won(p0.entry)}</span><span class="stop">손절 ${won(p0.stop)}</span><span>1차 ${won(p0.target1)}</span><span>손익비 ${p0.rr}</span></div>
+        <div class="sum-foot"><span class="held-sum" data-held="${esc(s.name)}"></span><span class="chev"></span></div>
+      </summary>
+      <div class="detail">
+        <div class="meta">${esc(s.code)} · 거래량 ${won(s.volume)} · RSI ${s.rsi.toFixed(1)} · ${esc(s.sources.join(", "))}${s.base ? ` · 기준 거래대금 ${s.base.value_eok.toLocaleString("ko-KR")}억(${s.base.days_ago}일 전)` : ""}</div>
+        ${Object.entries(s.plans).map(([k, p]) => planHtml(k, p)).join("")}
+        ${scoreHtml(s)}
+        <div class="news">${(s.leader_news || []).map(a => `<a href="${esc(a.link)}" target="_blank" rel="noopener"><small>대장주</small>${esc(a.title)}</a>`).join("")}${s.news.slice(0, 3).map(a => `<a href="${esc(a.link)}" target="_blank" rel="noopener"><small>${esc(a.source)}</small>${esc(a.title)}</a>`).join("")}</div>
+        <div class="quick" data-i="${i}">
+          <div class="held" data-held="${esc(s.name)}"></div>
+          <div class="hint">실제로 거래했다면 수량과 체결가를 넣고 바로 기록하세요 (체결가는 계획 매수가로 채워져 있으니 실제 가격으로 고치세요).</div>
+          <div class="qrow">
+            <input class="q-qty" type="number" min="1" step="1" inputmode="numeric" placeholder="수량(주)" aria-label="수량">
+            <input class="q-price" type="number" min="0" step="1" inputmode="numeric" value="${p0.entry}" aria-label="체결가">
+            <button class="btn small" data-q="buy">매수 기록</button>
+            <button class="btn ghost small" data-q="sell">매도 기록</button>
+          </div>
+          <div class="qmsg"></div>
+        </div>
       </div>
-    </div>`).join("") : '<div class="empty">오늘은 조건에 맞는 종목이 없습니다.</div>';
+    </details>`; }).join("") : '<div class="empty">오늘은 조건에 맞는 종목이 없습니다.</div>';
   $("j-names").innerHTML = list.map(s => `<option value="${esc(s.name)}">`).join("");
 }
 
@@ -492,6 +520,8 @@ function showTab(name) {
   $("tab-top").setAttribute("aria-selected", name === "top"); $("tab-journal").setAttribute("aria-selected", name === "journal");
 }
 document.querySelector(".tabs").onclick = e => { const t = e.target.dataset.tab; if (t) showTab(t); };
+$("open-all").onclick = () => document.querySelectorAll("details.card").forEach(d => d.open = true);
+$("close-all").onclick = () => document.querySelectorAll("details.card").forEach(d => d.open = false);
 $("grid").onclick = e => {
   const side = e.target.dataset.q; if (!side) return;
   const box = e.target.closest(".quick"), s = data.stocks[+box.dataset.i], out = box.querySelector(".qmsg");

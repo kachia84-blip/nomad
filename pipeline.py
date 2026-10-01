@@ -25,7 +25,7 @@ def run_pipeline(log, progress, manual=None):
         progress(i, total * 2)
         try:
             df = indicators.add_indicators(collector.fetch_daily(c["code"]))
-            base = screener.find_base(df)           # 기준 거래대금이 터진 종목만 눌림목 후보
+            base = screener.find_base(df) or screener.find_base_today(df)   # 기준 거래대금이 터진 종목만 후보
             setups = screener.classify(df, base)
             c["volume"] = c["volume"] or float(df.iloc[-1]["volume"])
         except Exception as e:
@@ -42,6 +42,8 @@ def run_pipeline(log, progress, manual=None):
         progress(total + int(total * j / max(len(picked), 1)), total * 2)
         r = news.analyze_news(s["name"], log)
         s["news"], s["keywords"] = r["articles"], r["keywords"]
+        s["leader_news"] = r["leader"][:3]
+        s["leader_hits"] = len(r["leader"])
 
     picked = scoring.apply_scores(picked)  # 100점 만점 점수 → 높은 순 정렬
     screened = len(picked)

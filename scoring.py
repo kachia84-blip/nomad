@@ -2,9 +2,9 @@
 ※ 수익을 예측하는 점수가 아니라 '조건이 얼마나 잘 갖춰졌나'를 보는 규칙 기반 점수입니다.
    배점을 바꾸고 싶으면 아래 숫자만 고치면 됩니다."""
 
-CORE_SETUPS = ("갭상승 양봉", "1일차 장대음봉 지지", "거감음봉 지지")   # 영상에서 소개된 유목민 핵심 매수 타점
+CORE_SETUPS = ("바닥주 224일선 돌파", "갭상승 양봉", "1일차 장대음봉 지지", "거감음봉 지지")   # 영상에서 소개된 유목민 핵심 매수 타점
 NO_CORE_PENALTY = 15                         # 핵심 타점이 없으면 감점
-SETUP_POINTS = {"갭상승 양봉": 14, "1일차 장대음봉 지지": 14, "거감음봉 지지": 14, "거감음봉": 12, "낙주": 12, "이평선 지지": 10, "RSI 추세 전환": 10}
+SETUP_POINTS = {"바닥주 224일선 돌파": 16, "갭상승 양봉": 14, "1일차 장대음봉 지지": 14, "거감음봉 지지": 14, "거감음봉": 12, "낙주": 12, "이평선 지지": 10, "RSI 추세 전환": 10}
 
 
 def score_detail(s):
@@ -44,11 +44,15 @@ def score_detail(s):
     out.append({"name": "주도성", "max": 15, "score": lead,
                 "reason": f"{', '.join(s['sources'])} → 항목당 5점(최대 10점).{btxt} 시장의 돈이 크게 몰린 종목일수록 주도주일 가능성이 큽니다."})
 
-    # 5) 재료 (10점)
-    theme = min(10, 4 * len(s["keywords"]))
+    # 5) 재료 (10점): 핵심 키워드 하나당 4점 + 뉴스가 대장주로 부르면 가산
+    hits = s.get("leader_hits", 0)
+    leader_pts = 4 if hits >= 2 else 2 if hits == 1 else 0
+    theme = min(10, 4 * len(s["keywords"]) + leader_pts)
     kw = ", ".join(f"#{k}" for k in s["keywords"]) or "없음"
+    ltxt = (f" '{s['name']} 대장주'로 검색한 뉴스에서 대장주로 언급한 기사가 {hits}건이라 +{leader_pts}점." if hits
+            else " '대장주'로 언급한 기사는 찾지 못했습니다(+0점).")
     out.append({"name": "재료", "max": 10, "score": theme,
-                "reason": f"뉴스에서 찾은 핵심 키워드: {kw}. 하나당 4점(최대 10점)이라 {theme}점입니다."})
+                "reason": f"뉴스에서 찾은 핵심 키워드: {kw} (하나당 4점).{ltxt} 합계 {theme}점(최대 10점)입니다."})
 
     # 6) 추세 위치 (5점)
     above = s["price"] >= s["ma45"]
@@ -75,6 +79,6 @@ def apply_scores(stocks):
         has_core = any(k in s["setups"] for k in CORE_SETUPS)
         s["score"] = raw if has_core else max(0, raw - NO_CORE_PENALTY)
         s["score_note"] = ("" if has_core else
-                           f"항목 합계는 {raw}점이지만, 핵심 타점(갭상승 양봉·1일차 장대음봉 지지·거감음봉 지지)이 없어 {NO_CORE_PENALTY}점을 감점했습니다.")
+                           f"항목 합계는 {raw}점이지만, 핵심 타점(바닥주 224일선 돌파·갭상승 양봉·1일차 장대음봉 지지·거감음봉 지지)이 없어 {NO_CORE_PENALTY}점을 감점했습니다.")
         s["grade"] = grade(s["score"])
     return sorted(stocks, key=lambda s: -s["score"])

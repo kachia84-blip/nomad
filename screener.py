@@ -79,6 +79,33 @@ def find_base(df):
             "close": float(r["close"]), "volume": float(r["volume"])}
 
 
+def find_base_today(df):
+    """오늘 자체가 기준 거래대금 봉인 경우(500억 이상 양봉). 바닥주 224일선 돌파(종가 배팅)에만 쓴다."""
+    r = df.iloc[-1]
+    v = r["close"] * r["volume"]
+    if r["close"] > r["open"] and v >= config.BASE_TRADE_VALUE:
+        return {"date": str(r["date"]), "value_eok": int(round(v / 1e8)), "days_ago": 0, "kind": "500억",
+                "close": float(r["close"]), "volume": float(r["volume"])}
+    return None
+
+
+def bottom_breakout(df, base):
+    """[바닥주 224일선 돌파] 224일선 아래에서 오래 눌려 있던 종목이 거래대금을 터뜨리며 224일선을 돌파한 자리.
+    영상: 유목민이 특히 좋아하는 자리. 돌파한 종가에서 종가 배팅, 갭으로 돌파하면 높은 확률로 급등, 수익 줄 때 매도."""
+    t = df.iloc[-1]
+    ma = t["ma224"]
+    if len(df) < 230 or ma != ma:
+        return False, ""
+    prior = df.iloc[-36:-6]                                  # 오늘 기준 6~36일 전
+    below = float((prior["close"] < prior["ma224"]).mean())
+    above_pct = (t["close"] / ma - 1) * 100
+    y = df.iloc[-2]
+    gap_through = y["ma224"] == y["ma224"] and y["close"] < y["ma224"] and t["open"] >= ma
+    ok = (below >= config.BOTTOM_BELOW_RATIO and 0 < above_pct <= config.BOTTOM_MAX_ABOVE_PCT)
+    how = "시가부터 갭으로 돌파" if gap_through else "종가로 돌파"
+    return ok, f"224일선 {ma:,.0f}원 아래에서 눌려 있다가(직전 30일 중 {below:.0%}) {how}, 종가는 224일선보다 {above_pct:.1f}% 위"
+
+
 def gap_up_candle(df, base):
     """[갭상승 양봉] 기준일 이후, 시가가 갭으로 뜨고 양봉으로 마감하며 기준일 종가를 지키는 캔들.
     영상: 갭은 크든 작든 좋고, 윗꼬리가 길수록 좋다. 종가가 전일 종가 이상이면 더 좋다. 갭이 약하면 대응하지 않는다."""
@@ -135,12 +162,18 @@ SETUPS = {
 
 def classify(df, base):
     """타점을 검사해 {타점이름: 설명} 로 반환. 기준 거래대금이 터진 종목(base)만 대상입니다.
-    20일선 아래(3% 넘게)에 있는 종목은 낙주(45일선 눌림)를 빼고 제외합니다."""
+    20일선 아래(3% 넘게)에 있는 종목은 낙주(45일선 눌림)를 빼고 제외합니다.
+    base 가 '오늘'(days_ago 0)이면 바닥주 224일선 돌파만 검사합니다(기준일 다음 날부터가 다른 타점의 자리)."""
     if len(df) < 20 or base is None:
         return {}
+    found = {}
+    ok, note = bottom_breakout(df, base)
+    if ok:
+        found["바닥주 224일선 돌파"] = note
+    if base["days_ago"] < 1:
+        return found
     t = df.iloc[-1]
     above20 = t["ma20"] != t["ma20"] or t["close"] >= t["ma20"] * 0.97
-    found = {}
     if above20:
         for name, func in (("갭상승 양봉", gap_up_candle), ("1일차 장대음봉 지지", first_day_big_bear), ("거감음봉 지지", dry_bear_support)):
             ok, note = func(df, base)

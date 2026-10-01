@@ -31,10 +31,10 @@ def naver_news(keyword):
     return items
 
 
-def google_news(keyword):
+def google_news(keyword, suffix=" 주식"):
     """구글 뉴스 RSS에서 (제목, 요약, 링크) 목록."""
     time.sleep(random.uniform(config.SLEEP_MIN, config.SLEEP_MAX))
-    url = "https://news.google.com/rss/search?q=" + urllib.parse.quote(keyword + " 주식") + "&hl=ko&gl=KR&ceid=KR:ko"
+    url = "https://news.google.com/rss/search?q=" + urllib.parse.quote(keyword + suffix) + "&hl=ko&gl=KR&ceid=KR:ko"
     res = requests.get(url, headers=config.HEADERS, timeout=config.TIMEOUT)
     root = ET.fromstring(res.content)
     items = []
@@ -55,6 +55,21 @@ def match_keywords(articles, own_name=""):
     return [k for k in hits if not any(k != o and k in o for o in hits)]
 
 
+def leader_news(name, log):
+    """'종목명 대장주'로 검색해서, 제목이나 요약에 종목명과 '대장'이 함께 나오는 기사를 찾는다.
+    (영상: 대장주는 그날 같은 재료에서 가장 많이 움직인 종목 → 뉴스가 대장주로 부르는지로 어림잡는다)"""
+    found = []
+    for func in (lambda k: naver_news(k), lambda k: google_news(k, suffix="")):
+        try:
+            for a in func(f"{name} 대장주"):
+                text = a["title"] + " " + a["summary"]
+                if name in text and "대장" in text and all(a["link"] != f["link"] for f in found):
+                    found.append(a)
+        except Exception as e:
+            log(f"  {name} 대장주 검색 실패: {e}")
+    return found
+
+
 def analyze_news(name, log):
     """한 종목의 뉴스를 모아 {articles, keywords} 로 돌려준다. 한 곳이 실패해도 계속 진행."""
     articles = []
@@ -63,4 +78,5 @@ def analyze_news(name, log):
             articles += func(name)
         except Exception as e:
             log(f"  {name} {func.__name__} 실패: {e}")
-    return {"articles": articles, "keywords": match_keywords(articles, name)}
+    leader = leader_news(name, log)
+    return {"articles": articles, "keywords": match_keywords(articles, name), "leader": leader}
