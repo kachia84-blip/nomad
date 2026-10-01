@@ -352,11 +352,12 @@ function renderJ() {
 
   const price = {}; if (data) data.stocks.forEach(s => price[s.name] = s.price);
   const held = Object.entries(c.pos).filter(([, p]) => p.qty > 0);
-  $("holdings").innerHTML = held.length ? `<table><thead><tr><th>종목</th><th>수량</th><th>평균단가</th><th>매입금액</th><th>현재가(직접 입력)</th><th>평가손익</th></tr></thead><tbody>` +
+  $("holdings").innerHTML = held.length ? `<table><thead><tr><th>종목</th><th>수량</th><th>평균단가</th><th>매입금액</th><th>현재가(직접 입력)</th><th>평가손익</th><th></th></tr></thead><tbody>` +
     held.map(([n, p]) => { const avg = p.cost / p.qty, manual = J.prices[n], cur = manual || price[n];
       return `<tr><td>${esc(n)}</td><td>${won(p.qty)}</td><td>${won(avg)}</td><td>${won(p.cost)}</td>` +
         `<td><input class="px" data-px="${esc(n)}" type="number" min="0" step="1" inputmode="numeric" value="${manual || ""}" placeholder="${price[n] ? won(price[n]) + " (자동)" : "입력"}" style="width:120px;text-align:right"></td>` +
-        (cur ? `<td class="${sgn(cur - avg)}">${(cur - avg) * p.qty >= 0 ? "+" : ""}${won((cur - avg) * p.qty)} (${pct((cur - avg) / avg * 100)})</td>` : `<td>-</td>`) + `</tr>`; }).join("") +
+        (cur ? `<td class="${sgn(cur - avg)}">${(cur - avg) * p.qty >= 0 ? "+" : ""}${won((cur - avg) * p.qty)} (${pct((cur - avg) / avg * 100)})</td>` : `<td>-</td>`) +
+        `<td><button class="btn small" data-sell="${esc(n)}">매도 기록</button></td></tr>`; }).join("") +
     `</tbody></table><div class="sub" style="margin-top:6px">현재가를 입력하면 평가손익이 계산됩니다. 비워 두면 오늘 TOP 10에 있는 종목만 자동으로 채워집니다.</div>` : '<div class="empty" style="padding:14px 0">보유 중인 종목이 없습니다.</div>';
 
   const rows = [...J.trades].sort((a, b) => a.date === b.date ? b.id - a.id : a.date < b.date ? 1 : -1);
@@ -385,6 +386,17 @@ $("j-add").onclick = () => {
   msg("j-msg", ok ? "기록했습니다." : "저장 공간을 쓸 수 없어 이 화면에서만 유지됩니다. 백업 내용을 복사해 두세요.", ok ? "ok" : "err");
   $("j-qty").value = ""; $("j-memo").value = "";
   renderJ();
+};
+$("holdings").onclick = e => {
+  const n = e.target.dataset.sell; if (n === undefined) return;
+  const p = calcJ(J.trades, J.fee).pos[n]; if (!p || p.qty <= 0) return;
+  const auto = data && data.stocks.find(x => x.name === n);
+  const cur = J.prices[n] || (auto && auto.price) || "";
+  $("j-name").value = n; $("j-side").value = "sell"; $("j-date").value = todayKst();
+  $("j-qty").value = p.qty; $("j-price").value = cur;
+  msg("j-msg", cur ? "보유 수량 전부가 채워졌습니다. 일부만 팔았다면 수량을 고치고, 실제 체결가를 확인한 뒤 '기록 추가'를 누르세요." : "체결가를 입력하고 '기록 추가'를 누르세요.", "ok");
+  $("j-name").scrollIntoView({ block: "center" });
+  (cur ? $("j-qty") : $("j-price")).focus();
 };
 $("holdings").onchange = e => {
   const n = e.target.dataset.px; if (n === undefined) return;
