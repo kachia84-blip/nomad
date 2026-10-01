@@ -23,7 +23,22 @@ def make_plan(setup, df):
     high20 = df.iloc[-21:-1]["high"].max()      # 직전 20일 고점 = 저항선 겸 1차 목표
     low5 = df.iloc[-6:]["low"].min()
 
-    if setup == "거감음봉":
+    y = df.iloc[-2]
+    if setup == "갭상승 양봉":
+        entry, stop = t["close"], y["close"]
+        how = "기준 거래대금 이후 나온 갭상승 양봉의 종가 부근에서 분할 매수 (다음 날 갭이 유지되면 추가)"
+        why_entry = (f"기준 거래대금이 터진 뒤 오늘 갭상승 양봉이 종가 {won(entry)}를 지켰습니다. "
+                     f"영상에서 소개된 유목민의 매수 자리(종가를 지켜주는 갭상승 양봉)라 종가 부근을 진입가로 잡았습니다.")
+        why_stop = f"전일 종가 {won(stop)}입니다. 이 가격까지 내려오면 갭이 메워진 것이라 갭상승 시나리오가 틀린 것으로 봅니다."
+    elif setup == "거감음봉 지지":
+        near = min((3, 8), key=lambda n: abs(t["low"] - t[f"ma{n}"]))
+        ma = t[f"ma{near}"]
+        entry, stop = t["close"], ma * 0.97
+        how = f"기준 거래대금 이후 거래량이 마른 음봉이 {near}일선에서 지지받는 자리, 현재가 부근에서 분할 매수"
+        why_entry = (f"기준 거래대금이 터진 종목이 거래량이 마르며 {near}일선({won(ma)})에서 지지받고 있습니다. "
+                     f"영상에서 소개된 두 번째 매수 자리라 현재가 {won(entry)} 부근을 진입가로 잡았습니다.")
+        why_stop = f"{near}일선 {won(ma)}의 3% 아래입니다. 이 선을 종가로 이탈하면 지지 실패로 봅니다."
+    elif setup == "거감음봉":
         entry, stop = t["high"], t["low"]
         how = "다음 날 오늘 음봉의 고가를 돌파할 때 매수 (돌파 못 하면 관망)"
         why_entry = (f"오늘 음봉의 고가 {won(entry)}를 다시 넘어서면, 거래량이 줄어든 채 눌린 뒤 "
@@ -68,7 +83,7 @@ def make_plan(setup, df):
         "target1": tick(t1), "target2": tick(t2),
         "risk_pct": round(float(risk / entry * 100), 1),
         "rr": round(float((t1 - entry) / risk), 2),
-        "exit_rule": "1차 목표에서 절반 매도, 나머지는 5일선 종가 이탈 시 정리. 손절가 종가 이탈 시 전량 매도.",
+        "exit_rule": "수익이 날 때 1차 목표에서 절반 먼저 챙기고(길게 끄는 기법이 아님), 나머지는 5일선 종가 이탈 시 정리. 손절가 종가 이탈 시 전량 매도.",
         "reasons": {"entry": why_entry, "stop": why_stop, "target1": why_t1, "target2": why_t2,
                     "rr": f"손익비 = (1차 목표 − 진입가) ÷ (진입가 − 손절가) = {won(t1 - entry)} ÷ {won(risk)}"},
     }

@@ -163,8 +163,8 @@
       <summary>활용법 · 점수 기준</summary>
       <h3>보는 순서</h3>
       <ol>
-        <li>점수 높은 순입니다. 위에서부터 보고, D등급은 참고만 하세요.</li>
-        <li>카드의 <b>타점 태그</b>로 어떤 자리인지 확인합니다.</li>
+        <li>점수 높은 순입니다. 핵심 타점(갭상승 양봉·거감음봉 지지)이 없는 종목은 점수가 59점(C)까지로 제한됩니다. 위에서부터 보고, D등급은 참고만 하세요. 모든 종목은 <b>최근 10일 안에 일봉 거래대금 500억 이상 양봉(기준 거래대금)</b>이 터진 종목입니다.</li>
+        <li>카드의 <b>타점 태그</b>로 어떤 자리인지 확인합니다. 핵심은 <b>갭상승 양봉</b>(종가를 지키는 갭상승 양봉)과 <b>거감음봉 지지</b>(거래량 마른 음봉이 3·8일선에서 지지)입니다.</li>
         <li><b>매수·손절·목표가</b>를 장 시작 전에 주문 계획으로 적어 둡니다. "산정 이유"에서 그 가격의 근거를 확인하세요.</li>
         <li>"점수 상세"에서 각 점수가 왜 그렇게 나왔는지 봅니다.</li>
         <li>실제로 매매했다면 <b>매매일지</b> 탭에 기록하세요. 총 수익률과 손익비가 계산됩니다.</li>
@@ -286,7 +286,7 @@ function scoreHtml(s) {
     <div class="top"><span>${esc(d.name)}</span><span>${d.score} / ${d.max}</span></div>
     <div class="bar"><i style="width:${d.max ? d.score / d.max * 100 : 0}%"></i></div>
     <p>${esc(d.reason)}</p></div>`).join("");
-  return rows ? `<details class="more"><summary>점수 상세 (왜 ${s.score}점인가)</summary>${rows}</details>` : "";
+  return rows ? `<details class="more"><summary>점수 상세 (왜 ${s.score}점인가)</summary>${rows}${s.score_note ? `<p class="sub" style="margin:8px 0 0"><b>${esc(s.score_note)}</b></p>` : ""}</details>` : "";
 }
 function renderTop() {
   if (!data) { $("grid").innerHTML = '<div class="empty">아직 결과가 없습니다.</div>'; return; }
@@ -298,7 +298,7 @@ function renderTop() {
         <div><span class="name">${esc(s.name)}</span><span class="code">${esc(s.code)}</span></div>
         <div class="price"><b>${won(s.price)}</b> <span class="${s.rate >= 0 ? "up" : "down"}">${pct(s.rate)}</span></div>
       </div>
-      <div class="meta">거래량 ${won(s.volume)} · RSI ${s.rsi.toFixed(1)} · ${esc(s.sources.join(", "))}</div>
+      <div class="meta">거래량 ${won(s.volume)} · RSI ${s.rsi.toFixed(1)} · ${esc(s.sources.join(", "))}${s.base ? ` · 기준 거래대금 ${s.base.value_eok.toLocaleString("ko-KR")}억(${s.base.days_ago}일 전)` : ""}</div>
       <div class="tags">${Object.keys(s.setups).map(k => `<span class="tag">${esc(k)}</span>`).join("")}
         ${s.keywords.map(k => `<span class="tag kw">#${esc(k)}</span>`).join("")}</div>
       ${Object.entries(s.plans).map(([k, p]) => planHtml(k, p)).join("")}

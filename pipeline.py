@@ -25,14 +25,15 @@ def run_pipeline(log, progress, manual=None):
         progress(i, total * 2)
         try:
             df = indicators.add_indicators(collector.fetch_daily(c["code"]))
-            setups = screener.classify(df)
+            base = screener.find_base(df)           # 기준 거래대금이 터진 종목만 눌림목 후보
+            setups = screener.classify(df, base)
             c["volume"] = c["volume"] or float(df.iloc[-1]["volume"])
         except Exception as e:
             log(f"{c['name']} 분석 실패: {e}")
             continue
         if setups:
             last = df.iloc[-1]
-            picked.append({**c, "setups": setups, "plans": trade_plan.make_plans(setups, df), "rsi": float(last["rsi"]),
+            picked.append({**c, "base": base, "setups": setups, "plans": trade_plan.make_plans(setups, df), "rsi": float(last["rsi"]),
                            **{f"ma{n}": float(last[f"ma{n}"]) for n in (3, 5, 8, 45)}})
             log(f"✔ {c['name']} → {', '.join(setups)}")
 

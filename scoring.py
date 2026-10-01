@@ -2,7 +2,9 @@
 ※ 수익을 예측하는 점수가 아니라 '조건이 얼마나 잘 갖춰졌나'를 보는 규칙 기반 점수입니다.
    배점을 바꾸고 싶으면 아래 숫자만 고치면 됩니다."""
 
-SETUP_POINTS = {"거감음봉": 12, "낙주": 12, "이평선 지지": 10, "RSI 추세 전환": 10}
+CORE_SETUPS = ("갭상승 양봉", "거감음봉 지지")   # 영상에서 소개된 유목민 핵심 매수 타점
+NO_CORE_CAP = 59                             # 핵심 타점이 없으면 점수 상한 (C등급까지)
+SETUP_POINTS = {"갭상승 양봉": 14, "거감음봉 지지": 14, "거감음봉": 12, "낙주": 12, "이평선 지지": 10, "RSI 추세 전환": 10}
 
 
 def score_detail(s):
@@ -33,10 +35,14 @@ def score_detail(s):
                 "reason": f"[{tight[0]}] 기준 손절폭이 진입가 대비 {risk}%입니다. 3% 이하면 만점, 10% 이상이면 0점이라 {safety}점입니다. "
                           f"손절이 짧을수록 한 번 틀렸을 때 잃는 돈이 작습니다."})
 
-    # 4) 주도성 (15점)
-    lead = min(15, 5 * len(s["sources"]))
+    # 4) 주도성 (15점): 거래대금 상위 등 각 5점(최대 10점) + 기준 거래대금 규모 보너스(최대 5점)
+    base = s.get("base")
+    bonus = (5 if base["value_eok"] >= 1000 else 3) if base else 0
+    lead = min(10, 5 * len(s["sources"])) + bonus
+    btxt = (f" 기준 거래대금 {base['value_eok']:,}억({base['date']}, {base['days_ago']}일 전)이라 +{bonus}점."
+            if base else "")
     out.append({"name": "주도성", "max": 15, "score": lead,
-                "reason": f"{', '.join(s['sources'])} → 항목당 5점씩 {lead}점입니다. 시장의 돈이 몰린 종목일수록 주도주일 가능성이 큽니다."})
+                "reason": f"{', '.join(s['sources'])} → 항목당 5점(최대 10점).{btxt} 시장의 돈이 크게 몰린 종목일수록 주도주일 가능성이 큽니다."})
 
     # 5) 재료 (10점)
     theme = min(10, 4 * len(s["keywords"]))
@@ -65,6 +71,10 @@ def apply_scores(stocks):
         detail = score_detail(s)
         s["score_detail"] = detail
         s["score_parts"] = {d["name"]: d["score"] for d in detail}
-        s["score"] = round(sum(d["score"] for d in detail))
+        raw = round(sum(d["score"] for d in detail))
+        has_core = any(k in s["setups"] for k in CORE_SETUPS)
+        s["score"] = raw if has_core else min(raw, NO_CORE_CAP)
+        s["score_note"] = ("" if has_core or raw <= NO_CORE_CAP else
+                           f"항목 합계는 {raw}점이지만, 핵심 타점(갭상승 양봉·거감음봉 지지)이 없어 {NO_CORE_CAP}점으로 제한했습니다.")
         s["grade"] = grade(s["score"])
     return sorted(stocks, key=lambda s: -s["score"])

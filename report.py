@@ -25,6 +25,8 @@ def build_markdown(result):
     lines += ["", "## 타점 상세", ""]
     for s in result["stocks"]:
         lines.append(f"### {s['name']} ({s['code']}) {s['rate']:+.2f}%")
+        if s.get("base"):
+            lines.append(f"- 기준 거래대금: {s['base']['date']} ({s['base']['days_ago']}일 전) {s['base']['value_eok']:,}억")
         for k, v in s["setups"].items():
             lines.append(f"- **{k}**: {v}")
         for k, p in s["plans"].items():
