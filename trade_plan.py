@@ -30,8 +30,15 @@ def make_plan(setup, df):
         why_entry = (f"기준 거래대금이 터진 뒤 오늘 갭상승 양봉이 종가 {won(entry)}를 지켰습니다. "
                      f"영상에서 소개된 유목민의 매수 자리(종가를 지켜주는 갭상승 양봉)라 종가 부근을 진입가로 잡았습니다.")
         why_stop = f"전일 종가 {won(stop)}입니다. 이 가격까지 내려오면 갭이 메워진 것이라 갭상승 시나리오가 틀린 것으로 봅니다."
+    elif setup == "1일차 장대음봉 지지":
+        entry = t["close"]
+        stop = min(y["close"], t["ma3"] if t["ma3"] == t["ma3"] else y["close"]) * 0.98
+        how = "기준 거래대금 다음 날 장대 음봉이 지지선을 지킨 자리, 종가 부근 매수 (재료와 시황이 살아 있을 때)"
+        why_entry = (f"기준 거래대금 다음 날 장대 음봉이 나왔지만 종가 {won(entry)}가 전일 종가·전일 고가·3일선 중 하나를 지켰습니다. "
+                     f"영상에서 소개된 강한 매수 기회(거래량이 늘어도 무방)라 종가 부근을 진입가로 잡았습니다.")
+        why_stop = f"전일 종가와 3일선 중 낮은 값의 2% 아래인 {won(stop)}입니다. 지지선을 종가로 이탈하면 이 매수 근거가 사라집니다."
     elif setup == "거감음봉 지지":
-        near = min((3, 8), key=lambda n: abs(t["low"] - t[f"ma{n}"]))
+        near = min((3, 8, 15, 20), key=lambda n: abs(t["low"] - t[f"ma{n}"]))
         ma = t[f"ma{near}"]
         entry, stop = t["close"], ma * 0.97
         how = f"기준 거래대금 이후 거래량이 마른 음봉이 {near}일선에서 지지받는 자리, 현재가 부근에서 분할 매수"
