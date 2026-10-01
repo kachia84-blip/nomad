@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 
 import config
+import market
 import collector, indicators, screener, news, report, trade_plan, scoring
 
 RESULT_FILE = os.path.join(report.REPORT_DIR, "latest.json")
@@ -45,6 +46,7 @@ def run_pipeline(log, progress, manual=None):
         s["leader_news"] = r["leader"][:3]
         s["leader_hits"] = len(r["leader"])
 
+    market.attach_market(picked, log)       # 업종·테마 시황
     picked = scoring.apply_scores(picked)  # 100점 만점 점수 → 높은 순 정렬
     screened = len(picked)
     picked = picked[: config.SHOW_TOP_N]    # 상위 N개만 남김

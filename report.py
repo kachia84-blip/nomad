@@ -27,6 +27,13 @@ def build_markdown(result):
         lines.append(f"### {s['name']} ({s['code']}) {s['rate']:+.2f}%")
         if s.get("base"):
             lines.append(f"- 기준 거래대금: {s['base']['date']} ({s['base']['days_ago']}일 전) {s['base']['value_eok']:,}억")
+        m = s.get("market") or {}
+        if m.get("industry"):
+            i = m["industry"]
+            lines.append(f"- 업종: {i['name']} {i['rate']:+.2f}% ({i['count']}개 중 {i['rank']}위)")
+        if m.get("theme"):
+            t = m["theme"]
+            lines.append(f"- 상위 테마: {t['name']} {t['rate']:+.2f}% ({t['rise']}/{t['total']}종목 상승)")
         for k, v in s["setups"].items():
             lines.append(f"- **{k}**: {v}")
         for k, p in s["plans"].items():

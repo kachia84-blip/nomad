@@ -4,6 +4,7 @@
 
 CORE_SETUPS = ("바닥주 224일선 돌파", "갭상승 양봉", "1일차 장대음봉 지지", "거감음봉 지지")   # 영상에서 소개된 유목민 핵심 매수 타점
 NO_CORE_PENALTY = 15                         # 핵심 타점이 없으면 감점
+THEME_TOP_N = 40                             # market.py 와 같은 값
 SETUP_POINTS = {"바닥주 224일선 돌파": 16, "갭상승 양봉": 14, "1일차 장대음봉 지지": 14, "거감음봉 지지": 14, "거감음봉": 12, "낙주": 12, "이평선 지지": 10, "RSI 추세 전환": 10}
 
 
@@ -22,16 +23,16 @@ def score_detail(s):
     # 2) 손익비 (25점)
     best = max(plans.items(), key=lambda kv: kv[1]["rr"])
     rr = best[1]["rr"]
-    reward = round(max(0.0, min(rr / 3, 1)) * 25, 1)
-    out.append({"name": "손익비", "max": 25, "score": reward,
-                "reason": f"[{best[0]}] 기준 손익비가 {rr}입니다. 3 이상이면 만점이라 {rr}÷3×25 = {reward}점입니다. "
+    reward = round(max(0.0, min(rr / 3, 1)) * 20, 1)
+    out.append({"name": "손익비", "max": 20, "score": reward,
+                "reason": f"[{best[0]}] 기준 손익비가 {rr}입니다. 3 이상이면 만점이라 {rr}÷3×20 = {reward}점입니다. "
                           f"(1차 목표까지 갈 때 이익이 손절폭의 몇 배인지)"})
 
     # 3) 손절폭 (15점)
     tight = min(plans.items(), key=lambda kv: kv[1]["risk_pct"])
     risk = tight[1]["risk_pct"]
-    safety = round(max(0.0, min((10 - risk) / 7, 1)) * 15, 1)
-    out.append({"name": "손절폭", "max": 15, "score": safety,
+    safety = round(max(0.0, min((10 - risk) / 7, 1)) * 10, 1)
+    out.append({"name": "손절폭", "max": 10, "score": safety,
                 "reason": f"[{tight[0]}] 기준 손절폭이 진입가 대비 {risk}%입니다. 3% 이하면 만점, 10% 이상이면 0점이라 {safety}점입니다. "
                           f"손절이 짧을수록 한 번 틀렸을 때 잃는 돈이 작습니다."})
 
@@ -53,6 +54,26 @@ def score_detail(s):
             else " '대장주'로 언급한 기사는 찾지 못했습니다(+0점).")
     out.append({"name": "재료", "max": 10, "score": theme,
                 "reason": f"뉴스에서 찾은 핵심 키워드: {kw} (하나당 4점).{ltxt} 합계 {theme}점(최대 10점)입니다."})
+
+    # 6) 시황 (10점): 업종 5점 + 테마 5점 (오늘 시장이 관심 갖는 섹터인가)
+    m = s.get("market") or {}
+    ind, th = m.get("industry"), m.get("theme")
+    if ind:
+        share = ind["rank"] / ind["count"]
+        ip = 5 if share <= 0.2 else 3 if share <= 0.4 else 1 if ind["rate"] > 0 else 0
+        itxt = (f"업종 '{ind['name']}'은 오늘 {ind['rate']:+.2f}%로 {ind['count']}개 업종 중 {ind['rank']}위"
+                f"(상승 {ind['rise']}/{ind['total']}종목) → {ip}점(상위 20% 5점, 40% 3점, 상승 1점).")
+    else:
+        ip, itxt = 0, "업종 정보를 가져오지 못해 0점."
+    if th:
+        ratio = th["rise"] / th["total"] if th["total"] else 0
+        tp = 5 if th["rate"] >= 3 and ratio >= 0.7 else 3 if th["rate"] >= 1.5 else 1
+        ttxt = (f"오늘 상승률 상위 {THEME_TOP_N}개 테마 중 '{th['name']}'에 속함({th['rate']:+.2f}%, {th['rise']}/{th['total']}종목 상승) → {tp}점"
+                f"(+3% 이상·70% 이상 상승 5점, +1.5% 이상 3점, 그 외 1점).")
+    else:
+        tp, ttxt = 0, f"오늘 상승률 상위 {THEME_TOP_N}개 테마에 속하지 않아 0점."
+    out.append({"name": "시황", "max": 10, "score": ip + tp,
+                "reason": f"{itxt} {ttxt} 재료·차트·거래량이 갖춰져도 그날 시장이 관심 갖는 섹터가 아니면 움직이지 않는다는 기준입니다."})
 
     # 6) 추세 위치 (5점)
     above = s["price"] >= s["ma45"]

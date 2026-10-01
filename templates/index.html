@@ -188,7 +188,8 @@
       </ol>
       <h3>배점 (100점)</h3>
       <ul>
-        <li>타점 30 · 손익비 25 · 손절폭 15 · 주도성 15 · 재료 10 · 추세 5</li>
+        <li>타점 30 · 손익비 20 · 손절폭 10 · 주도성 15 · 재료 10 · 시황 10 · 추세 5</li>
+        <li>시황은 그 종목의 업종과 소속 테마가 오늘 얼마나 올랐는지(상위 업종·테마인지)로 봅니다.</li>
         <li>A 75점 이상 · B 60점 이상 · C 45점 이상 · D 그 아래</li>
       </ul>
       <h3>주의</h3>
@@ -306,6 +307,11 @@ function scoreHtml(s) {
     <p>${esc(d.reason)}</p></div>`).join("");
   return rows ? `<details class="more"><summary>점수 상세 (왜 ${s.score}점인가)</summary>${rows}${s.score_note ? `<p class="sub" style="margin:8px 0 0"><b>${esc(s.score_note)}</b></p>` : ""}</details>` : "";
 }
+function marketHtml(s) {
+  const m = s.market || {}, i = m.industry, t = m.theme;
+  if (!i && !t) return "";
+  return `<div class="meta" style="margin-top:-2px">${i ? `업종 ${esc(i.name)} <b class="${i.rate >= 0 ? "up" : "down"}">${pct(i.rate)}</b> (${i.count}개 중 ${i.rank}위)` : ""}${i && t ? " · " : ""}${t ? `테마 ${esc(t.name)} <b class="${t.rate >= 0 ? "up" : "down"}">${pct(t.rate)}</b> (${t.rise}/${t.total} 상승)` : ""}</div>`;
+}
 function renderTop() {
   if (!data) { $("grid").innerHTML = '<div class="empty">아직 결과가 없습니다.</div>'; return; }
   const list = data.stocks.slice(0, 10);
@@ -328,6 +334,7 @@ function renderTop() {
       </summary>
       <div class="detail">
         <div class="meta">${esc(s.code)} · 거래량 ${won(s.volume)} · RSI ${s.rsi.toFixed(1)} · ${esc(s.sources.join(", "))}${s.base ? ` · 기준 거래대금 ${s.base.value_eok.toLocaleString("ko-KR")}억(${s.base.days_ago}일 전)` : ""}</div>
+        ${marketHtml(s)}
         ${Object.entries(s.plans).map(([k, p]) => planHtml(k, p)).join("")}
         ${scoreHtml(s)}
         <div class="news">${(s.leader_news || []).map(a => `<a href="${esc(a.link)}" target="_blank" rel="noopener"><small>대장주</small>${esc(a.title)}</a>`).join("")}${s.news.slice(0, 3).map(a => `<a href="${esc(a.link)}" target="_blank" rel="noopener"><small>${esc(a.source)}</small>${esc(a.title)}</a>`).join("")}</div>
