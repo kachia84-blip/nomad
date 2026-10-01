@@ -2,8 +2,12 @@ name: 유목민 주도주 분석
 
 on:
   schedule:
-    - cron: "30 11,15,19,23,3,7 * * *"
+    # 매시 30분마다 확인합니다. 이번 회차(20:30 기준) 결과가 이미 있으면 20초 만에 건너뛰고,
+    # 없으면 분석합니다. GitHub 예약 실행은 늦게 도는 일이 있어서 촘촘히 확인하도록 했습니다.
+    - cron: "30 * * * *"
   workflow_dispatch:
+  push:
+    paths: ["trigger.txt"]      # trigger.txt 를 올리면 바로 분석 (즉시 실행용)
 
 permissions:
   contents: write
@@ -26,16 +30,16 @@ jobs:
           python-version: "3.11"
           cache: pip
       - run: pip install -r requirements.txt
-      - name: 분석 실행 (예약 실행은 이번 회차 결과가 있으면 건너뜀, 수동 실행은 항상 실행)
+      - name: 분석 실행 (예약 실행은 이번 회차 결과가 있으면 건너뜀, 수동·즉시 실행은 항상 실행)
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            python build_snapshot.py
-          else
+          if [ "${{ github.event_name }}" = "schedule" ]; then
             python build_snapshot.py --if-needed
+          else
+            python build_snapshot.py
           fi
       - name: 결과 저장
         run: |
           git config user.name "nomad-bot"
           git config user.email "nomad-bot@users.noreply.github.com"
           git add reports docs
-          git diff --cached --quiet || (git commit -m "분석 결과 갱신" && git push)
+          git diff --cached --quiet || (git commit -m "분석 결과 갱신" && git pull --rebase -q && git push)
