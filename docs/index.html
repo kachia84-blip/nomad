@@ -302,8 +302,8 @@ function renderTop() {
 
 /* ───────── 매매일지 ───────── */
 const KEY = "nomad.journal.v1";
-let J = { trades: [], fee: 0 };
-function loadJ() { try { const v = JSON.parse(localStorage.getItem(KEY) || "null"); if (v && Array.isArray(v.trades)) J = { trades: v.trades, fee: +v.fee || 0 }; } catch (e) {} }
+let J = { trades: [], fee: 0, prices: {} };
+function loadJ() { try { const v = JSON.parse(localStorage.getItem(KEY) || "null"); if (v && Array.isArray(v.trades)) J = { trades: v.trades, fee: +v.fee || 0, prices: (v.prices && typeof v.prices === "object") ? v.prices : {} }; } catch (e) {} }
 function saveJ() { try { localStorage.setItem(KEY, JSON.stringify(J)); return true; } catch (e) { return false; } }
 
 /* 평균단가 방식: 매수하면 평균단가 갱신, 매도하면 (매도가−평균단가)×수량 이 실현손익 */
@@ -352,11 +352,12 @@ function renderJ() {
 
   const price = {}; if (data) data.stocks.forEach(s => price[s.name] = s.price);
   const held = Object.entries(c.pos).filter(([, p]) => p.qty > 0);
-  $("holdings").innerHTML = held.length ? `<table><thead><tr><th>종목</th><th>수량</th><th>평균단가</th><th>매입금액</th><th>현재가</th><th>평가손익</th></tr></thead><tbody>` +
-    held.map(([n, p]) => { const avg = p.cost / p.qty, cur = price[n];
+  $("holdings").innerHTML = held.length ? `<table><thead><tr><th>종목</th><th>수량</th><th>평균단가</th><th>매입금액</th><th>현재가(직접 입력)</th><th>평가손익</th></tr></thead><tbody>` +
+    held.map(([n, p]) => { const avg = p.cost / p.qty, manual = J.prices[n], cur = manual || price[n];
       return `<tr><td>${esc(n)}</td><td>${won(p.qty)}</td><td>${won(avg)}</td><td>${won(p.cost)}</td>` +
-        (cur ? `<td>${won(cur)}</td><td class="${sgn(cur - avg)}">${pct((cur - avg) / avg * 100)}</td>` : `<td>-</td><td>-</td>`) + `</tr>`; }).join("") +
-    `</tbody></table><div class="sub" style="margin-top:6px">현재가는 오늘 TOP 10에 있는 종목만 표시됩니다.</div>` : '<div class="empty" style="padding:14px 0">보유 중인 종목이 없습니다.</div>';
+        `<td><input class="px" data-px="${esc(n)}" type="number" min="0" step="1" inputmode="numeric" value="${manual || ""}" placeholder="${price[n] ? won(price[n]) + " (자동)" : "입력"}" style="width:120px;text-align:right"></td>` +
+        (cur ? `<td class="${sgn(cur - avg)}">${(cur - avg) * p.qty >= 0 ? "+" : ""}${won((cur - avg) * p.qty)} (${pct((cur - avg) / avg * 100)})</td>` : `<td>-</td>`) + `</tr>`; }).join("") +
+    `</tbody></table><div class="sub" style="margin-top:6px">현재가를 입력하면 평가손익이 계산됩니다. 비워 두면 오늘 TOP 10에 있는 종목만 자동으로 채워집니다.</div>` : '<div class="empty" style="padding:14px 0">보유 중인 종목이 없습니다.</div>';
 
   const rows = [...J.trades].sort((a, b) => a.date === b.date ? b.id - a.id : a.date < b.date ? 1 : -1);
   $("trades").innerHTML = (rows.length ? `<table><thead><tr><th>날짜</th><th>종목</th><th>구분</th><th>수량</th><th>체결가</th><th>손익</th><th class="l">메모</th><th></th></tr></thead><tbody>` +
@@ -385,6 +386,11 @@ $("j-add").onclick = () => {
   $("j-qty").value = ""; $("j-memo").value = "";
   renderJ();
 };
+$("holdings").onchange = e => {
+  const n = e.target.dataset.px; if (n === undefined) return;
+  const v = +e.target.value; if (v > 0) J.prices[n] = v; else delete J.prices[n];
+  saveJ(); renderJ();
+};
 $("j-fee").onchange = () => { J.fee = Math.max(0, +$("j-fee").value || 0); saveJ(); renderJ(); };
 $("trades").onclick = e => { const id = e.target.dataset.del; if (!id) return; J.trades = J.trades.filter(t => String(t.id) !== id); saveJ(); renderJ(); };
 $("j-export").onclick = async () => {
@@ -399,7 +405,7 @@ $("j-import").onclick = () => {
   try {
     const v = JSON.parse($("j-box").value);
     if (!v || !Array.isArray(v.trades)) throw new Error("형식 오류");
-    J = { trades: v.trades.filter(t => t && t.name && t.date && t.qty > 0 && t.price > 0).map((t, i) => ({ ...t, id: t.id || Date.now() + i })), fee: +v.fee || 0 };
+    J = { trades: v.trades.filter(t => t && t.name && t.date && t.qty > 0 && t.price > 0).map((t, i) => ({ ...t, id: t.id || Date.now() + i })), fee: +v.fee || 0, prices: (v.prices && typeof v.prices === "object") ? v.prices : {} };
     saveJ(); renderJ(); msg("j-msg2", `${J.trades.length}건을 가져왔습니다.`, "ok");
   } catch (e) { msg("j-msg2", "가져오기 실패: 내보내기로 복사한 내용을 그대로 붙여넣어야 합니다.", "err"); }
 };
