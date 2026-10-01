@@ -100,6 +100,15 @@
   .news a { display:block; color:var(--text); text-decoration:none; font-size:13px; padding:4px 0; border-top:1px solid var(--line); overflow-wrap:anywhere; }
   .news a:hover { color:var(--acc); }
   .news small { color:var(--sub); margin-right:5px; }
+  .quick { border-top:1px solid var(--line); margin-top:10px; padding-top:10px; }
+  .quick .held { font-size:12.5px; color:var(--acc); font-weight:600; min-height:0; margin-bottom:4px; }
+  .quick .held:empty { display:none; }
+  .qrow { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  .qrow input { flex:1 1 80px; width:auto; padding:7px 8px; }
+  .quick .hint { font-size:12px; color:var(--sub); margin:2px 0 6px; }
+  .quick .qmsg { font-size:12.5px; margin-top:6px; min-height:0; }
+  .quick .qmsg:empty { display:none; }
+  .quick .qmsg.err { color:var(--bad); } .quick .qmsg.ok { color:var(--good); }
   .empty { color:var(--sub); text-align:center; padding:40px 0; }
   .note-foot { color:var(--sub); font-size:12px; margin-top:26px; }
 
@@ -185,7 +194,7 @@
         <label>체결가(원)<input id="j-price" type="number" min="0" step="1" inputmode="numeric"></label>
         <label>메모(선택)<input id="j-memo" placeholder="예: 5일선 지지 진입"></label>
         <label>매도 비용(%)<input id="j-fee" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0"></label>
-        <div class="full"><button class="btn" id="j-add">기록 추가</button></div>
+        <div class="full"><button class="btn" id="j-add">기록 추가</button> <button class="btn ghost" id="j-cancel" hidden>수정 취소</button></div>
       </div>
       <datalist id="j-names"></datalist>
       <div class="msg" id="j-msg"></div>
@@ -295,7 +304,17 @@ function renderTop() {
       ${Object.entries(s.plans).map(([k, p]) => planHtml(k, p)).join("")}
       ${scoreHtml(s)}
       <div class="news">${s.news.slice(0, 3).map(a => `<a href="${esc(a.link)}" target="_blank" rel="noopener"><small>${esc(a.source)}</small>${esc(a.title)}</a>`).join("")}</div>
-      <div class="row-actions"><button class="btn ghost small" data-log="${i}">매매일지에 기록</button></div>
+      <div class="quick" data-i="${i}">
+        <div class="held" data-held="${esc(s.name)}"></div>
+        <div class="hint">내가 실제로 거래했다면 수량과 체결가를 넣고 바로 기록하세요 (체결가는 계획 매수가로 채워져 있으니 실제 가격으로 고치세요).</div>
+        <div class="qrow">
+          <input class="q-qty" type="number" min="1" step="1" inputmode="numeric" placeholder="수량(주)" aria-label="수량">
+          <input class="q-price" type="number" min="0" step="1" inputmode="numeric" value="${Object.values(s.plans)[0].entry}" aria-label="체결가">
+          <button class="btn small" data-q="buy">매수 기록</button>
+          <button class="btn ghost small" data-q="sell">매도 기록</button>
+        </div>
+        <div class="qmsg"></div>
+      </div>
     </div>`).join("") : '<div class="empty">오늘은 조건에 맞는 종목이 없습니다.</div>';
   $("j-names").innerHTML = list.map(s => `<option value="${esc(s.name)}">`).join("");
 }
@@ -337,6 +356,19 @@ function calcJ(trades, fee) {
     pf: sum(losses) < 0 && wins.length ? sum(wins) / -sum(losses) : null,
   };
 }
+let editId = null, renName = null;
+function lev(a, b) {   // 두 이름이 몇 글자 다른지 (오타 찾기용)
+  const m = a.length, n = b.length; let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) { const cur = [i]; for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = cur; }
+  return prev[n];
+}
+function renameAll(from, to) {
+  to = to.trim(); if (!to || to === from) return;
+  J.trades.forEach(t => { if (t.name === from) t.name = to; });
+  if (J.prices[from] && !J.prices[to]) J.prices[to] = J.prices[from]; delete J.prices[from];
+  saveJ(); renName = null; renderJ();
+}
+function setEditUI(on) { $("j-add").textContent = on ? "수정 저장" : "기록 추가"; $("j-cancel").hidden = !on; }
 function renderJ() {
   const c = calcJ(J.trades, J.fee);
   const tile = (label, val, cls = "", note = "") => `<div class="tile"><small>${label}</small><b class="${cls}">${val}</b>${note ? `<small>${note}</small>` : ""}</div>`;
@@ -350,15 +382,23 @@ function renderJ() {
     tile("평균 손실", c.avgLoss ? "-" + won(c.avgLoss) + "원" : dash, "neg") +
     tile("총이익 ÷ 총손실", c.pf === null ? dash : c.pf.toFixed(2), "", "프로핏 팩터");
 
-  const price = {}; if (data) data.stocks.forEach(s => price[s.name] = s.price);
+  const price = Object.assign({}, (data && data.prices) || {}); if (data) data.stocks.forEach(s => price[s.name] = s.price);
   const held = Object.entries(c.pos).filter(([, p]) => p.qty > 0);
+  const known = Object.keys(price);
+  const hints = held.filter(([n]) => !price[n] && !J.prices[n]).map(([n]) => {
+    let best = null, bd = 3; for (const k of known) { const d = lev(n, k); if (d < bd) { bd = d; best = k; } }
+    return best && n.length >= 3 ? [n, best] : null; }).filter(Boolean);
   $("holdings").innerHTML = held.length ? `<table><thead><tr><th>종목</th><th>수량</th><th>평균단가</th><th>매입금액</th><th>현재가(직접 입력)</th><th>평가손익</th><th></th></tr></thead><tbody>` +
     held.map(([n, p]) => { const avg = p.cost / p.qty, manual = J.prices[n], cur = manual || price[n];
-      return `<tr><td>${esc(n)}</td><td>${won(p.qty)}</td><td>${won(avg)}</td><td>${won(p.cost)}</td>` +
+      const nameCell = renName === n
+        ? `<input class="rn" value="${esc(n)}" style="width:130px"> <button class="btn small" data-rensave="${esc(n)}">저장</button> <button class="btn ghost small" data-rencancel="1">취소</button>`
+        : `${esc(n)} <button class="btn ghost small" data-ren="${esc(n)}">이름 변경</button>`;
+      return `<tr><td>${nameCell}</td><td>${won(p.qty)}</td><td>${won(avg)}</td><td>${won(p.cost)}</td>` +
         `<td><input class="px" data-px="${esc(n)}" type="number" min="0" step="1" inputmode="numeric" value="${manual || ""}" placeholder="${price[n] ? won(price[n]) + " (자동)" : "입력"}" style="width:120px;text-align:right"></td>` +
         (cur ? `<td class="${sgn(cur - avg)}">${(cur - avg) * p.qty >= 0 ? "+" : ""}${won((cur - avg) * p.qty)} (${pct((cur - avg) / avg * 100)})</td>` : `<td>-</td>`) +
         `<td><button class="btn small" data-sell="${esc(n)}">매도 기록</button></td></tr>`; }).join("") +
-    `</tbody></table><div class="sub" style="margin-top:6px">현재가를 입력하면 평가손익이 계산됩니다. 비워 두면 오늘 TOP 10에 있는 종목만 자동으로 채워집니다.</div>` : '<div class="empty" style="padding:14px 0">보유 중인 종목이 없습니다.</div>';
+    `</tbody></table><div class="sub" style="margin-top:6px">현재가를 입력하면 평가손익이 계산됩니다. 비워 두면 오늘 분석한 후보 종목은 자동으로 채워집니다. 그 밖의 종목은 직접 입력하세요.</div>` + hints.map(([n, k]) => `<div class="msg err">'${esc(n)}'의 현재가를 못 찾았습니다. 혹시 <b>${esc(k)}</b>인가요? <button class="btn small" data-fix="${esc(n)}" data-to="${esc(k)}">이 이름으로 바꾸기</button></div>`).join("")
+    : '<div class="empty" style="padding:14px 0">보유 중인 종목이 없습니다.</div>';
 
   const rows = [...J.trades].sort((a, b) => a.date === b.date ? b.id - a.id : a.date < b.date ? 1 : -1);
   $("trades").innerHTML = (rows.length ? `<table><thead><tr><th>날짜</th><th>종목</th><th>구분</th><th>수량</th><th>체결가</th><th>손익</th><th class="l">메모</th><th></th></tr></thead><tbody>` +
@@ -366,10 +406,11 @@ function renderJ() {
       return `<tr><td>${esc(t.date)}</td><td>${esc(t.name)}</td><td class="${t.side === "buy" ? "buytag" : "selltag"}">${t.side === "buy" ? "매수" : "매도"}</td>
         <td>${won(t.qty)}</td><td>${won(t.price)}</td>
         <td class="${r ? sgn(r.pnl) : ""}">${r ? (r.pnl >= 0 ? "+" : "") + won(r.pnl) + " (" + pct(r.pnlPct) + ")" : "-"}</td>
-        <td class="l">${esc(t.memo || "")}</td><td><button class="btn ghost small" data-del="${t.id}">삭제</button></td></tr>`; }).join("") +
+        <td class="l">${esc(t.memo || "")}</td><td><button class="btn ghost small" data-edit="${t.id}">수정</button> <button class="btn ghost small" data-del="${t.id}">삭제</button></td></tr>`; }).join("") +
     `</tbody></table>` : '<div class="empty" style="padding:14px 0">아직 기록이 없습니다. 위에서 첫 거래를 기록해 보세요.</div>') +
     c.warn.map(w => `<div class="msg err">${esc(w)}</div>`).join("");
   $("j-fee").value = J.fee || "";
+  updateHeld();
 }
 function msg(id, text, cls) { const e = $(id); e.textContent = text; e.className = "msg " + (cls || ""); }
 function todayKst() { const p = kstParts(Date.now()), z = n => String(n).padStart(2, "0"); return `${p.y}-${z(p.m + 1)}-${z(p.d)}`; }
@@ -381,14 +422,23 @@ $("j-add").onclick = () => {
   if (!(qty > 0)) return msg("j-msg", "수량은 1주 이상이어야 합니다.", "err");
   if (!(price > 0)) return msg("j-msg", "체결가를 입력하세요.", "err");
   J.fee = Math.max(0, +$("j-fee").value || 0);
-  J.trades.push({ id: Date.now(), name, side: $("j-side").value, date, qty, price, memo: $("j-memo").value.trim() });
+  const rec = { name, side: $("j-side").value, date, qty, price, memo: $("j-memo").value.trim() };
+  const editing = editId !== null;
+  if (editing) { const t = J.trades.find(x => x.id === editId); if (t) Object.assign(t, rec); else J.trades.push({ id: Date.now(), ...rec }); }
+  else J.trades.push({ id: Date.now(), ...rec });
+  editId = null; setEditUI(false);
   const ok = saveJ();
-  msg("j-msg", ok ? "기록했습니다." : "저장 공간을 쓸 수 없어 이 화면에서만 유지됩니다. 백업 내용을 복사해 두세요.", ok ? "ok" : "err");
+  msg("j-msg", ok ? (editing ? "수정했습니다." : "기록했습니다.") : "저장 공간을 쓸 수 없어 이 화면에서만 유지됩니다. 백업 내용을 복사해 두세요.", ok ? "ok" : "err");
   $("j-qty").value = ""; $("j-memo").value = "";
   renderJ();
 };
 $("holdings").onclick = e => {
-  const n = e.target.dataset.sell; if (n === undefined) return;
+  const d = e.target.dataset;
+  if (d.ren !== undefined) { renName = d.ren; renderJ(); const i = document.querySelector("input.rn"); if (i) i.focus(); return; }
+  if (d.rencancel !== undefined) { renName = null; renderJ(); return; }
+  if (d.rensave !== undefined) { renameAll(d.rensave, document.querySelector("input.rn").value); return; }
+  if (d.fix !== undefined) { renameAll(d.fix, d.to); return; }
+  const n = d.sell; if (n === undefined) return;
   const p = calcJ(J.trades, J.fee).pos[n]; if (!p || p.qty <= 0) return;
   const auto = data && data.stocks.find(x => x.name === n);
   const cur = J.prices[n] || (auto && auto.price) || "";
@@ -404,7 +454,21 @@ $("holdings").onchange = e => {
   saveJ(); renderJ();
 };
 $("j-fee").onchange = () => { J.fee = Math.max(0, +$("j-fee").value || 0); saveJ(); renderJ(); };
-$("trades").onclick = e => { const id = e.target.dataset.del; if (!id) return; J.trades = J.trades.filter(t => String(t.id) !== id); saveJ(); renderJ(); };
+$("trades").onclick = e => {
+  const d = e.target.dataset;
+  if (d.edit) {
+    const t = J.trades.find(x => String(x.id) === d.edit); if (!t) return;
+    editId = t.id; setEditUI(true);
+    $("j-name").value = t.name; $("j-side").value = t.side; $("j-date").value = t.date;
+    $("j-qty").value = t.qty; $("j-price").value = t.price; $("j-memo").value = t.memo || "";
+    msg("j-msg", "수정할 내용을 고치고 '수정 저장'을 누르세요.", "ok");
+    $("j-name").scrollIntoView({ block: "center" }); return;
+  }
+  if (!d.del) return;
+  if (String(editId) === d.del) { editId = null; setEditUI(false); }
+  J.trades = J.trades.filter(t => String(t.id) !== d.del); saveJ(); renderJ();
+};
+$("j-cancel").onclick = () => { editId = null; setEditUI(false); $("j-qty").value = ""; $("j-memo").value = ""; msg("j-msg", "수정을 취소했습니다.", ""); };
 $("j-export").onclick = async () => {
   const text = JSON.stringify(J); $("j-box").value = text;
   try { await navigator.clipboard.writeText(text); msg("j-msg2", "복사했습니다. 메모장 등에 붙여넣어 보관하세요.", "ok"); }
@@ -429,11 +493,33 @@ function showTab(name) {
 }
 document.querySelector(".tabs").onclick = e => { const t = e.target.dataset.tab; if (t) showTab(t); };
 $("grid").onclick = e => {
-  const i = e.target.dataset.log; if (i === undefined) return;
-  const s = data.stocks[+i], p = Object.values(s.plans)[0];
-  showTab("journal"); $("j-name").value = s.name; $("j-side").value = "buy"; $("j-price").value = p.entry; $("j-qty").focus();
-  window.scrollTo(0, 0);
+  const side = e.target.dataset.q; if (!side) return;
+  const box = e.target.closest(".quick"), s = data.stocks[+box.dataset.i], out = box.querySelector(".qmsg");
+  const say = (t, cls) => { out.textContent = t; out.className = "qmsg " + cls; };
+  const qty = Math.floor(+box.querySelector(".q-qty").value), price = +box.querySelector(".q-price").value;
+  if (!(qty > 0)) return say("수량(주)을 입력하세요.", "err");
+  if (!(price > 0)) return say("체결가를 입력하세요.", "err");
+  if (side === "sell") {
+    const held = (calcJ(J.trades, J.fee).pos[s.name] || { qty: 0 }).qty;
+    if (held <= 0) return say("일지에 보유 중인 수량이 없습니다. 먼저 매수를 기록하세요.", "err");
+    if (qty > held) return say(`보유 수량(${won(held)}주)보다 많이 팔 수 없습니다.`, "err");
+  }
+  J.trades.push({ id: Date.now(), name: s.name, side, date: todayKst(), qty, price,
+                  memo: `TOP10 ${+box.dataset.i + 1}위 ${Object.keys(s.setups).join("/")}` });
+  const ok = saveJ();
+  renderJ();
+  box.querySelector(".q-qty").value = "";
+  say(`${side === "buy" ? "매수" : "매도"} ${won(qty)}주 @ ${won(price)}원 기록했습니다. 매매일지 탭에서 확인할 수 있습니다.` + (ok ? "" : " (저장 공간을 쓸 수 없어 이 화면에서만 유지됩니다)"), ok ? "ok" : "err");
 };
+
+/* 카드에 '보유 중' 표시 */
+function updateHeld() {
+  const pos = calcJ(J.trades, J.fee).pos;
+  document.querySelectorAll("[data-held]").forEach(el => {
+    const p = pos[el.dataset.held];
+    el.textContent = p && p.qty > 0 ? `보유 중 ${won(p.qty)}주 · 평균단가 ${won(p.cost / p.qty)}원` : "";
+  });
+}
 
 /* ───────── 실행(로컬 서버 전용) ───────── */
 async function loadResult() { try { data = await (await fetch("/api/result")).json(); } catch (e) {} renderAll(); }

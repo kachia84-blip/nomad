@@ -50,6 +50,7 @@ def run_pipeline(log, progress, manual=None):
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "candidate_count": total,
         "screened_count": screened,
+        "prices": {c["name"]: c["price"] for c in candidates},  # 후보 전체의 현재가 (보유 종목 평가용)
         "stocks": picked,
     }
     report.save_report(result)
