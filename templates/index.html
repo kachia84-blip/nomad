@@ -293,7 +293,7 @@ function renderStatus() {
   const next = nextSlot(now, fresh);
   el.innerHTML =
     `<span><b>갱신</b> ${fmtKst(made)} (${rel(now - made)} 전)</span>` +
-    `<span class="${fresh ? "" : "late"}"><b>다음</b> ${fmtKst(next)} (${rel(next - now)} 후)${fresh ? "" : " · 지연 중, 매시간 재시도"}</span>` +
+    `<span class="${fresh ? "" : "late"}"><b>다음</b> ${fmtKst(next)} (${rel(next - now)} 후)${fresh ? "" : " · 지연 중 (GitHub 예약 실행 대기)"}</span>` +
     `<span>후보 ${data.candidate_count} · 타점 ${data.screened_count ?? data.stocks.length}</span>`;
 }
 
