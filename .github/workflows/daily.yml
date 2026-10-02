@@ -1,14 +1,21 @@
 name: 유목민 주도주 분석
 
 on:
-  schedule:
-    # GitHub 예약 실행은 실제로는 예정의 일부만 돌고 몇 시간씩 건너뛰는 일이 많습니다.
-    # 그래서 10분마다 확인하도록 촘촘히 걸어 둡니다. 이번 회차(20:30 기준) 결과가 이미 있으면
-    # 20초 만에 건너뛰고, 없을 때만 분석합니다. (정각·30분은 몰려서 더 자주 건너뛰므로 피함)
-    - cron: "3,13,23,33,43,53 * * * *"
+  # 1) 외부 알람 서비스(cron-job.org 등)가 매일 저녁 GitHub API 로 이 워크플로를 직접 호출합니다. (주력)
+  #    body: {"ref":"main","inputs":{"auto":"true"}}
+  #    auto=true 이면 '이번 회차(20:30 기준) 결과가 이미 있을 때' 20초 만에 건너뛰므로 여러 번 불러도 안전합니다.
   workflow_dispatch:
+    inputs:
+      auto:
+        description: "true 이면 이번 회차 결과가 있을 때 건너뜀 (자동 호출용). 비우면 항상 분석"
+        required: false
+        default: "false"
+  # 2) GitHub 예약 실행: 늦거나 빠지는 일이 잦아서 보조로만 둡니다.
+  schedule:
+    - cron: "17 * * * *"
+  # 3) trigger.txt 를 올리면 바로 분석 (즉시 실행용)
   push:
-    paths: ["trigger.txt"]      # trigger.txt 를 올리면 바로 분석 (즉시 실행용)
+    paths: ["trigger.txt"]
 
 permissions:
   contents: write
@@ -31,9 +38,12 @@ jobs:
           python-version: "3.11"
           cache: pip
       - run: pip install -r requirements.txt
-      - name: 분석 실행 (예약 실행은 이번 회차 결과가 있으면 건너뜀, 수동·즉시 실행은 항상 실행)
+      - name: 분석 실행 (자동 호출은 이번 회차 결과가 있으면 건너뜀, 수동·즉시 실행은 항상 실행)
+        env:
+          AUTO: ${{ inputs.auto }}
+          EVENT: ${{ github.event_name }}
         run: |
-          if [ "${{ github.event_name }}" = "schedule" ]; then
+          if [ "$EVENT" = "schedule" ] || [ "$AUTO" = "true" ]; then
             python build_snapshot.py --if-needed
           else
             python build_snapshot.py
