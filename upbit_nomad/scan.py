@@ -201,16 +201,18 @@ header{{display:flex;justify-content:space-between;gap:12px;align-items:flex-sta
 .miss{{margin:4px 0;font-size:13px;color:var(--C)}}
 .why{{margin:6px 0;padding-left:18px;font-size:13px}}.tw{{overflow-x:auto}}table{{border-collapse:collapse;width:100%;font-size:13px;min-width:380px}}
 th,td{{text-align:right;padding:5px 6px;border-bottom:1px solid var(--line);white-space:nowrap}}th:first-child,td:first-child{{text-align:left}}th{{color:var(--mut);font-weight:500}}
+.stale{{background:#fdecea;color:#b42318;border:1px solid #f4b7b0;border-radius:10px;padding:10px 14px;margin:12px 0;font-size:14px}}@media(prefers-color-scheme:dark){{.stale{{background:#3b1714;color:#ffb4aa;border-color:#7a2a22}}}}
 .bd{{font-size:11px;font-weight:600;border-radius:99px;padding:1px 8px;margin-left:4px;vertical-align:middle}}.bd.v{{background:var(--A);color:#fff}}.bd.r{{background:var(--line);color:var(--mut)}}
 footer{{color:var(--mut);font-size:12px;margin-top:24px}}</style></head><body><main>
 <h1>업비트 유목민 · 4시간봉</h1>
+<div id="stale" class="stale" hidden>⚠ 갱신이 지연되고 있습니다. 아래 내용은 오래된 데이터일 수 있습니다. (새 4시간봉이 마감된 지 30분이 지났는데 아직 반영되지 않았습니다.)</div>
 <p class="mut">기준 캔들 <b>{e(r['last_candle'])}</b> · 계산 {r['updated']} (KST) · 스캔 {r['scanned']}개 코인 · 신호 {len(r['signals'])}개</p>
 <div class="top"><b>BTC 시황</b> {strategy.fmt(btc['price'])} · {e(state)}<p class="mut small">4시간봉은 업비트 기준 01·05·09·13·17·21시에 시작하고 4시간 뒤 마감됩니다. 마감된 봉만 사용하고, 하루 6번 갱신됩니다.</p></div>
 {sig_block}
 {watch_block}
 <footer><b>적용 기준(백테스트 최적)</b>: 기준봉 거래대금이 평소(7일 중앙값)의 10배 이상이고 최근 24시간 안에 터졌을 것 · 타점 3개(바닥주 224선 돌파, 거감음봉 지지, 1일차 장대음봉 지지) · BTC가 45선 위이고 5선>20선 · 목표가(손절폭의 1.5배) 도달 시 전량 매도, 손절 이탈 시 전량 매도, 최대 14일 보유.
 백테스트(48개 코인, 2025-12~2026-10, 수수료·슬리피지 반영): 227건, 승률 53%, 평균 +1.6%/건, 손익비(PF) 1.76. 앞쪽 60% 기간에서 고른 기준이 뒤쪽 40%에서도 유지됐고 시간 3등분 구간이 모두 플러스였습니다. 다만 현재 상장된 코인으로만 검증해 실제보다 좋게 나왔을 수 있고(생존 편향), 과거 성과가 앞으로를 보장하지 않습니다.
-'관찰' 코인은 신호 기준을 채우지 못한 코인이며 백테스트로 검증된 매수 대상이 아닙니다. 조건이 얼마나 갖춰졌는지 보는 규칙 기반 점수이며 투자 판단과 주문은 직접 하세요. 재료(뉴스) 항목은 반영하지 않아 90점 만점입니다.</footer></main></body></html>"""
+'관찰' 코인은 신호 기준을 채우지 못한 코인이며 백테스트로 검증된 매수 대상이 아닙니다. 조건이 얼마나 갖춰졌는지 보는 규칙 기반 점수이며 투자 판단과 주문은 직접 하세요. 재료(뉴스) 항목은 반영하지 않아 90점 만점입니다.</footer></main><script>(function(){{try{{var s=new Date('{r['last_candle_start'].replace(' ','T')}:00+09:00').getTime();if(Date.now()>s+8*3600000+30*60000)document.getElementById('stale').hidden=false}}catch(e){{}}}})();</script></body></html>"""
 
 
 if __name__ == "__main__":
