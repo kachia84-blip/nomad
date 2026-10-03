@@ -65,8 +65,11 @@ def build(out_dir):
            "ma45": float(b["ma45"]), "candle": candle_label(b["date"])}
     ranks = {m: i + 1 for i, (m, _, _) in enumerate(sorted(((m, n, v) for m, (n, v, _) in data.items()), key=lambda x: -x[2]))}
 
+    btc["ok"] = btc["above45"] and btc["aligned"]
     out = []
     for m, (name, v24, df) in data.items():
+        if config.REQUIRE_BTC and not btc["ok"]:
+            break                                   # BTC 조건 미충족: 신규 매수 신호를 내지 않는다
         setups, base = strategy.find_setups(df)
         if not setups:
             continue
@@ -77,9 +80,8 @@ def build(out_dir):
              "candle": candle_label(t["date"]), "vol_ratio": float(t["volume"] / df.iloc[-2]["volume"]) if df.iloc[-2]["volume"] > 0 else 1.0,
              "chart": [round(float(x), 6) for x in df["close"].tail(60)]}
         s["parts"], s["score"], s["grade"], s["core"] = score(s, btc, ranks[m])
-        s["verified"] = VERIFIED in setups
         out.append(s)
-    out.sort(key=lambda s: (not s["verified"], -s["score"]))
+    out.sort(key=lambda s: -s["score"])
 
     os.makedirs(out_dir, exist_ok=True)
     result = {"updated": f"{now:%Y-%m-%d %H:%M}", "last_candle": btc["candle"], "btc": btc, "scanned": len(data),
@@ -104,7 +106,8 @@ def spark(vals, w=120, h=32):
 def render(r):
     e = html.escape
     btc = r["btc"]
-    state = ("상승 (45선 위" + (", 5선>20선" if btc["aligned"] else "") + ")") if btc["above45"] else "약세 (45선 아래) - 신규 매수 주의"
+    state = ("상승 (45선 위, 5선>20선) - 매수 조건 충족" if btc["ok"] else
+             "45선 위지만 5선<20선 - 매수 조건 미충족" if btc["above45"] else "45선 아래(약세) - 매수 조건 미충족")
     cards = []
     for s in r["signals"]:
         best = max(s["plans"].items(), key=lambda kv: kv[1]["rr"])
@@ -116,7 +119,7 @@ def render(r):
         base = s["base"]
         btxt = (f"기준 거래대금 봉: {base['value_eok']}억원(평소의 {base['mult']}배), {base['days_ago']}캔들 전 · 직전 봉 대비 거래량 {s['vol_ratio']:.0%}" if base else "")
         parts = " · ".join(f"{k} {v}" for k, v in s["parts"].items())
-        cards.append(f"""<article class="card g{s['grade']}"><header><div><h2>{e(s['name'])} <small>{e(s['market'])}</small> <span class="bd {'v' if s['verified'] else 'r'}">{'백테스트 검증' if s['verified'] else '참고'}</span></h2>
+        cards.append(f"""<article class="card g{s['grade']}"><header><div><h2>{e(s['name'])} <small>{e(s['market'])}</small></h2>
 <p class="mut">현재가 {strategy.fmt(s['price'])} · 24h 거래대금 {s['v24_eok']:,}억 ({s['rank']}위)</p></div>
 <div class="sc"><b>{s['score']}</b><span>/{r['max_score']} {s['grade']}</span></div></header>
 <div class="sp">{spark(s['chart'])}</div>
@@ -143,8 +146,9 @@ th,td{{text-align:right;padding:5px 6px;border-bottom:1px solid var(--line);whit
 <p class="mut">갱신 {r['updated']} (KST) · 기준 캔들 {e(btc['candle'])} · 스캔 {r['scanned']}개 코인 · 후보 {len(r['signals'])}개</p>
 <div class="top"><b>BTC 시황</b> {strategy.fmt(btc['price'])} · {e(state)}<p class="mut small">4시간봉은 업비트 기준 01·05·09·13·17·21시에 시작하고 4시간 뒤 마감됩니다. 마감된 봉만 사용합니다.</p></div>
 {body}
-<footer>조건이 얼마나 갖춰졌는지 보는 규칙 기반 점수이며 수익을 예측하지 않습니다. 투자 판단과 주문은 직접 하세요. 재료(뉴스) 항목은 아직 반영하지 않아 90점 만점입니다.
-기준봉 거래대금이 평소의 10~20배인 핵심 타점만 표시합니다(백테스트 최적 구간). 그중 '백테스트 검증' 표시는 바닥주 224선 돌파로, 40개 코인·약 10개월 중 48건에서 학습기(PF 2.4)와 검증기(PF 3.4) 모두 성과가 좋았던 타점입니다. 나머지 '참고' 타점은 장세에 따라 본전 수준이었습니다. 과거 성과가 앞으로를 보장하지 않습니다.</footer></main></body></html>"""
+<footer><b>적용 기준(백테스트 최적)</b>: 기준봉 거래대금이 평소(7일 중앙값)의 10배 이상이고 최근 24시간 안에 터졌을 것 · 타점 3개(바닥주 224선 돌파, 거감음봉 지지, 1일차 장대음봉 지지) · BTC가 45선 위이고 5선>20선 · 목표가(손절폭의 1.5배) 도달 시 전량 매도, 손절 이탈 시 전량 매도, 최대 14일 보유.
+백테스트(48개 코인, 2025-12~2026-10, 수수료·슬리피지 반영): 227건, 승률 53%, 평균 +1.6%/건, 손익비(PF) 1.76. 앞쪽 60% 기간에서 고른 기준이 뒤쪽 40%에서도 유지됐고 시간 3등분 구간이 모두 플러스였습니다. 다만 현재 상장된 코인으로만 검증해 실제보다 좋게 나왔을 수 있고(생존 편향), 과거 성과가 앞으로를 보장하지 않습니다.
+조건이 얼마나 갖춰졌는지 보는 규칙 기반 점수이며 투자 판단과 주문은 직접 하세요. 재료(뉴스) 항목은 반영하지 않아 90점 만점입니다.</footer></main></body></html>"""
 
 
 if __name__ == "__main__":

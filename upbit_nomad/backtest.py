@@ -8,6 +8,7 @@ import sys
 import pandas as pd
 
 import config
+import research
 import strategy
 import upbit
 
@@ -15,45 +16,19 @@ CORE = ("바닥주 224일선 돌파", "갭상승 양봉", "1일차 장대음봉 
 PRIORITY = CORE + ("거감음봉", "낙주", "이평선 지지", "RSI 추세 전환")
 
 
+_ARR = {}
+
+
 def simulate(df, i, plan):
-    """i번째 캔들에서 나온 신호를 다음 캔들부터 체결·관리. 거래 dict 또는 None."""
-    j = i + 1
-    if j >= len(df):
+    """i번째 캔들에서 나온 신호를 다음 캔들부터 체결·관리(research.sim 과 같은 규칙). 거래 dict 또는 None."""
+    key = id(df)
+    if key not in _ARR:
+        _ARR[key] = {k: df[k].values for k in ("open", "high", "low", "close", "ma5", "ma8", "ma20")}
+    res = research.sim(_ARR[key], i, plan, research.FINAL)
+    if res is None:
         return None
-    entry, stop, t1, t2 = plan["entry"], plan["stop"], plan["target1"], plan["target2"]
-    o = df["open"].iat[j]
-    if plan["breakout"]:
-        if df["high"].iat[j] < entry:
-            return None
-        fill = max(o, entry)
-    else:
-        if not (stop < o <= entry * 1.03):
-            return None
-        fill = o
-    cost = fill * (1 + config.SLIPPAGE) * (1 + config.FEE)
-    got, left, half = 0.0, 1.0, False
-
-    def sell(frac, price):
-        return frac * price * (1 - config.SLIPPAGE) * (1 - config.FEE)
-
-    last = min(j + config.MAX_HOLD, len(df) - 1)
-    k = j
-    while k <= last:
-        o_, h, l, c = (df[x].iat[k] for x in ("open", "high", "low", "close"))
-        if l <= stop:
-            got += sell(left, min(o_, stop)); left = 0; break
-        if not half and h >= t1:
-            got += sell(0.5, max(o_, t1)); left -= 0.5; half = True
-        if half and h >= t2:
-            got += sell(left, max(o_, t2)); left = 0; break
-        if half and c < df["ma5"].iat[k]:
-            got += sell(left, c); left = 0; break
-        k += 1
-    if left > 0:
-        k = min(k, last)
-        got += sell(left, df["close"].iat[k])
-    return {"entry_time": df["date"].iat[j], "exit_time": df["date"].iat[k], "hold": k - j + 1,
-            "ret": got / cost - 1, "half": half}
+    ret, hold = res
+    return {"entry_time": df["date"].iat[i + 1], "exit_time": df["date"].iat[min(i + hold, len(df) - 1)], "hold": hold, "ret": ret, "half": False}
 
 
 def run_coin(market, df, btc_up):
@@ -66,6 +41,9 @@ def run_coin(market, df, btc_up):
         setups, base = strategy.find_setups(sub)
         if not setups:
             continue
+        ab, al = btc_up.get(df["date"].iat[i], (False, False))
+        if config.REQUIRE_BTC and not (ab and al):
+            continue
         primary = next(s for s in PRIORITY if s in setups)
         plan = strategy.make_plan(primary, sub)
         res = simulate(df, i, plan)
@@ -75,7 +53,7 @@ def run_coin(market, df, btc_up):
         trades.append({"market": market, "signal_time": df["date"].iat[i], "setup": primary, "core": primary in CORE,
                        "all_setups": "+".join(setups),
                        "base_eok": base["value_eok"], "vol_ratio": round(float(sub["volume"].iat[-1] / sub["volume"].iat[-2]), 3) if sub["volume"].iat[-2] > 0 else 1.0, "base_mult": round(float(df["vmult"].iat[i - base["days_ago"]]), 1), "risk_pct": plan["risk_pct"], "rr": plan["rr"],
-                       "btc_up": bool(btc_up.get(df["date"].iat[i], False)), **res})
+                       "btc_up": bool(ab and al), **res})
     return trades
 
 
@@ -99,7 +77,7 @@ def main():
     btc = data.get("KRW-BTC")
     if btc is None:
         btc = strategy.add_indicators(upbit.closed_only(upbit.candles("KRW-BTC", config.BACKTEST_CANDLES)))
-    btc_up = dict(zip(btc["date"], (btc["close"] > btc["ma45"]).values))
+    btc_up = {d: (bool(c > m45), bool(m5 > m20)) for d, c, m45, m5, m20 in zip(btc["date"], btc["close"], btc["ma45"], btc["ma5"], btc["ma20"])}
 
     trades = []
     for m, df in data.items():

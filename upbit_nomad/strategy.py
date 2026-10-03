@@ -206,14 +206,14 @@ def find_setups(df):
         found.update(classify(df, bt))
         base = bt
     bp = find_base(df)
-    if bp and not config.BASE_MULT <= bp["mult"] < config.BASE_MULT_MAX:
+    if bp and (not config.BASE_MULT <= bp["mult"] < config.BASE_MULT_MAX or bp["days_ago"] > config.BASE_MAX_AGE):
         bp = None                                   # 가장 최근 기준봉이 10~20배 구간이 아니면 신호 없음
     if bp:
         for k, v in classify(df, bp).items():
             found.setdefault(k, v)
         base = bp
-    if config.CORE_ONLY:
-        found = {k: v for k, v in found.items() if k in CORE}
+    if config.ALLOWED_SETUPS is not None:
+        found = {k: v for k, v in found.items() if k in config.ALLOWED_SETUPS}
     return found, base
 
 
@@ -242,13 +242,12 @@ def make_plan(setup, df):
         entry, stop = t["ma45"] * 1.01, t["ma45"] * 0.96
     else:  # RSI 추세 전환
         entry, stop = t["high"], low5
-    risk = max(entry - stop, entry * 0.01)
-    t1 = high_res if high_res > entry * 1.03 else entry + 1.5 * risk
-    t2 = max(entry + 3 * risk, t1 * 1.05)
-    return {"entry": tick(entry), "stop": tick(stop), "target1": tick(t1), "target2": tick(t2),
-            "risk_pct": round(float(risk / entry * 100), 2), "rr": round(float((t1 - entry) / risk), 2),
+    risk = entry - stop if entry - stop > 0 else entry * 0.01
+    t1 = entry + config.TARGET_R * risk
+    return {"entry": tick(entry), "stop": tick(stop), "target1": tick(t1), "target2": tick(t1),
+            "risk_pct": round(float(risk / entry * 100), 2), "rr": config.TARGET_R,
             "breakout": setup in ("거감음봉", "RSI 추세 전환"),
-            "exit_rule": "1차 목표에서 절반 정리, 나머지는 5선(4시간봉 5개 평균) 종가 이탈 시 정리. 손절가 종가 이탈 시 전량 매도."}
+            "exit_rule": f"목표가(손절폭의 {config.TARGET_R}배) 도달 시 전량 매도, 손절가 이탈 시 전량 매도, 최대 {config.MAX_HOLD}캔들({config.MAX_HOLD // 6}일) 보유 후 정리."}
 
 
 def make_plans(setups, df):
