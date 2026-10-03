@@ -196,23 +196,26 @@ def classify(df, base):
     return found
 
 
-def find_setups(df):
-    """(타점dict, 기준봉) - 방금 마감된 봉이 기준봉인 경우와 이전 기준봉이 있는 경우를 모두 본다."""
+def find_setups(df, strict=True):
+    """(타점dict, 기준봉) - 방금 마감된 봉이 기준봉인 경우와 이전 기준봉이 있는 경우를 모두 본다.
+    strict=False 이면 배수·기준봉 나이·타점 종류 제한을 풀어서 '조건에 얼마나 가까운지' 볼 때 쓴다(관찰용)."""
+    def ok(b):
+        return not strict or (config.BASE_MULT <= b["mult"] < config.BASE_MULT_MAX and b["days_ago"] <= config.BASE_MAX_AGE)
     found, base = {}, None
     bt = find_base_today(df)
-    if bt and not config.BASE_MULT <= bt["mult"] < config.BASE_MULT_MAX:
+    if bt and not ok(bt):
         bt = None
     if bt:
         found.update(classify(df, bt))
         base = bt
     bp = find_base(df)
-    if bp and (not config.BASE_MULT <= bp["mult"] < config.BASE_MULT_MAX or bp["days_ago"] > config.BASE_MAX_AGE):
-        bp = None                                   # 가장 최근 기준봉이 10~20배 구간이 아니면 신호 없음
+    if bp and not ok(bp):
+        bp = None                                   # 가장 최근 기준봉이 기준(10배 이상·24시간 이내)을 못 채우면 신호 없음
     if bp:
         for k, v in classify(df, bp).items():
             found.setdefault(k, v)
         base = bp
-    if config.ALLOWED_SETUPS is not None:
+    if strict and config.ALLOWED_SETUPS is not None:
         found = {k: v for k, v in found.items() if k in config.ALLOWED_SETUPS}
     return found, base
 

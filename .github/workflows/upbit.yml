@@ -1,10 +1,11 @@
 # 업비트 유목민(4시간봉): 업비트 4시간봉은 한국시간 01·05·09·13·17·21시에 시작해 4시간 뒤 마감됩니다.
-# 마감 직후인 09·13·17·21·01·05시(KST)에 하루 6번 스캔하고 docs/upbit 에 결과를 올립니다. (UTC = KST - 9시간)
+# GitHub 예약 실행은 늦거나 빠지는 일이 있어서 매시 17분마다 시도하고, 이미 최신 4시간봉으로 계산돼 있으면 몇 초 만에 건너뜁니다.
+# 그래서 결과는 하루 6번(09·13·17·21·01·05시 이후 첫 성공 실행) 갱신됩니다.
 name: 업비트 유목민 4시간봉
 
 on:
   schedule:
-    - cron: "2 0,4,8,12,16,20 * * *"
+    - cron: "17 * * * *"
   workflow_dispatch:
   push:
     paths:
@@ -34,7 +35,8 @@ jobs:
       - run: pip install -r upbit_nomad/requirements.txt
       - name: 스캔 실행
         working-directory: upbit_nomad
-        run: python scan.py --out ../docs/upbit
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then python scan.py --out ../docs/upbit --if-needed; else python scan.py --out ../docs/upbit; fi
       - name: 결과 저장
         run: |
           git config user.name "nomad-bot"
