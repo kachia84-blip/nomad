@@ -73,7 +73,8 @@ def run_coin(market, df, btc_up):
             continue
         free_at = i + res["hold"]
         trades.append({"market": market, "signal_time": df["date"].iat[i], "setup": primary, "core": primary in CORE,
-                       "all_setups": "+".join(setups), "risk_pct": plan["risk_pct"], "rr": plan["rr"],
+                       "all_setups": "+".join(setups),
+                       "base_eok": base["value_eok"], "vol_ratio": round(float(sub["volume"].iat[-1] / sub["volume"].iat[-2]), 3) if sub["volume"].iat[-2] > 0 else 1.0, "base_mult": round(float(df["vmult"].iat[i - base["days_ago"]]), 1), "risk_pct": plan["risk_pct"], "rr": plan["rr"],
                        "btc_up": bool(btc_up.get(df["date"].iat[i], False)), **res})
     return trades
 
@@ -116,6 +117,15 @@ def main():
     print("\n■ 핵심 타점 여부"); print(t.groupby("core").apply(stats, include_groups=False).to_string())
     print("\n■ 신호 시점 BTC 상태(45선 위=상승)"); print(t.groupby("btc_up").apply(stats, include_groups=False).to_string())
     print("\n■ 핵심 타점 + BTC 상승일 때만"); print(stats(t[t["core"] & t["btc_up"]]).to_frame().T.to_string(index=False))
+    print("\n■ 기준봉 거래대금 배수별 (최근 7일 중앙값 대비)")
+    t["mult_bin"] = pd.cut(t["base_mult"], [0, 6, 10, 20, 1e9], labels=["4~6배", "6~10배", "10~20배", "20배+"])
+    print(t.groupby("mult_bin", observed=True).apply(stats, include_groups=False).to_string())
+    print("\n■ 기준봉 거래대금 금액별(억원)")
+    t["eok_bin"] = pd.cut(t["base_eok"], [0, 5, 20, 50, 1e9], labels=["~5억", "5~20억", "20~50억", "50억+"])
+    print(t.groupby("eok_bin", observed=True).apply(stats, include_groups=False).to_string())
+    print("\n■ 핵심 타점만, 기준봉 배수별")
+    c = t[t["core"]]
+    print(c.groupby("mult_bin", observed=True).apply(stats, include_groups=False).to_string())
     t["month"] = t["signal_time"].dt.to_period("M")
     print("\n■ 월별 평균수익%/거래수"); print(t.groupby("month")["ret"].agg(["count", lambda s: round(s.mean() * 100, 2)]).to_string())
 

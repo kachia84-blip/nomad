@@ -16,8 +16,9 @@ def add_indicators(df):
     df["rsi"] = 100 - 100 / (1 + gain / loss.replace(0, np.nan))
     # 거래대금이 터진 봉: 양봉 + 최근 7일 중앙값의 BASE_MULT배 이상 + 절대 최소금액 이상
     vmed = df["value"].rolling(42).median().shift(1)
+    df["vmult"] = df["value"] / vmed
     df["is_base"] = ((df["close"] > df["open"]) & (df["value"] >= config.BASE_MIN_VALUE)
-                     & (df["value"] >= config.BASE_MULT * vmed)).fillna(False)
+                     & (df["value"] >= config.BASE_FIND_MULT * vmed)).fillna(False)
     return df
 
 
@@ -39,7 +40,7 @@ def fmt(price):
 def _base_info(df, i):
     r = df.iloc[i]
     n = len(df)
-    return {"date": str(r["date"]), "value_eok": round(float(r["value"]) / 1e8, 1), "days_ago": n - 1 - i,
+    return {"date": str(r["date"]), "value_eok": round(float(r["value"]) / 1e8, 1), "days_ago": n - 1 - i, "mult": round(float(r["vmult"]), 1),
             "open": float(r["open"]), "close": float(r["close"]), "volume": float(r["volume"])}
 
 
@@ -159,6 +160,7 @@ def _uptrend(t):
 
 SIMPLE = {"거감음봉": gyeo_gam_eum, "이평선 지지": ma_support, "낙주": nakju, "RSI 추세 전환": rsi_reversal}
 PULLBACK = "거감음봉 지지"
+CORE = ("바닥주 224일선 돌파", "갭상승 양봉", "1일차 장대음봉 지지", "거감음봉 지지")
 
 
 def classify(df, base):
@@ -198,14 +200,20 @@ def find_setups(df):
     """(타점dict, 기준봉) - 방금 마감된 봉이 기준봉인 경우와 이전 기준봉이 있는 경우를 모두 본다."""
     found, base = {}, None
     bt = find_base_today(df)
+    if bt and not config.BASE_MULT <= bt["mult"] < config.BASE_MULT_MAX:
+        bt = None
     if bt:
         found.update(classify(df, bt))
         base = bt
     bp = find_base(df)
+    if bp and not config.BASE_MULT <= bp["mult"] < config.BASE_MULT_MAX:
+        bp = None                                   # 가장 최근 기준봉이 10~20배 구간이 아니면 신호 없음
     if bp:
         for k, v in classify(df, bp).items():
             found.setdefault(k, v)
         base = bp
+    if config.CORE_ONLY:
+        found = {k: v for k, v in found.items() if k in CORE}
     return found, base
 
 

@@ -15,21 +15,25 @@ import upbit
 SETUP_POINTS = {"바닥주 224일선 돌파": 16, "갭상승 양봉": 14, "1일차 장대음봉 지지": 14, "거감음봉 지지": 14,
                 "거감음봉": 12, "낙주": 12, "이평선 지지": 10, "RSI 추세 전환": 10}
 CORE = ("바닥주 224일선 돌파", "갭상승 양봉", "1일차 장대음봉 지지", "거감음봉 지지")
+VERIFIED = "바닥주 224일선 돌파"   # 백테스트 학습·검증 두 기간 모두 성과가 좋았던 타점
 MAX_SCORE = 90   # 재료(뉴스) 항목은 아직 연동하지 않아 90점 만점
 
 
 def score(s, btc, rank):
+    """90점 만점. 거래량(30점)이 가장 큰 비중: 기준봉 거래대금 배수(15) + 24시간 거래대금 순위(8) + 눌림 때 거래량 마름(7).
+    백테스트에서 기준봉이 평소의 6~20배일 때 성과가 가장 좋았고 20배 이상(꼭대기 급등)은 오히려 나빴습니다."""
     plans = s["plans"]
     rr = max(p["rr"] for p in plans.values())
     risk = min(p["risk_pct"] for p in plans.values())
+    mult = s["base"]["mult"] if s["base"] else 0
+    vm = 15 if 10 <= mult < 20 else 12 if 6 <= mult < 10 else 8 if mult >= 20 else 4
+    vr = s["vol_ratio"]
     parts = {
-        "타점": min(30, sum(SETUP_POINTS.get(k, 8) for k in s["setups"])),
-        "손익비": round(max(0.0, min(rr / 3, 1)) * 20, 1),
+        "거래량": vm + (8 if rank <= 5 else 6 if rank <= 15 else 4 if rank <= 30 else 2) + (7 if vr <= 0.3 else 4 if vr <= 0.6 else 0),
+        "타점": min(25, sum(SETUP_POINTS.get(k, 8) for k in s["setups"])),
+        "손익비": round(max(0.0, min(rr / 3, 1)) * 15, 1),
         "손절폭": round(max(0.0, min((10 - risk) / 7, 1)) * 10, 1),
-        "주도성": (8 if rank <= 5 else 6 if rank <= 15 else 4 if rank <= 30 else 2)
-                  + (7 if s["base"] and s["base"]["value_eok"] >= 50 else 4 if s["base"] and s["base"]["value_eok"] >= 15 else 2),
         "시황": (5 if btc["above45"] else 0) + (5 if btc["aligned"] else 0),
-        "추세": (3 if s["price"] >= s["ma45"] else 0) + (2 if s["ma3"] > s["ma5"] > s["ma8"] else 0),
     }
     raw = sum(parts.values())
     has_core = any(k in CORE for k in s["setups"])
@@ -70,11 +74,12 @@ def build(out_dir):
         s = {"market": m, "name": name, "price": float(t["close"]), "ma3": float(t["ma3"]), "ma5": float(t["ma5"]),
              "ma8": float(t["ma8"]), "ma45": float(t["ma45"]), "setups": setups, "base": base,
              "plans": strategy.make_plans(setups, df), "v24_eok": round(v24 / 1e8), "rank": ranks[m],
-             "candle": candle_label(t["date"]),
+             "candle": candle_label(t["date"]), "vol_ratio": float(t["volume"] / df.iloc[-2]["volume"]) if df.iloc[-2]["volume"] > 0 else 1.0,
              "chart": [round(float(x), 6) for x in df["close"].tail(60)]}
         s["parts"], s["score"], s["grade"], s["core"] = score(s, btc, ranks[m])
+        s["verified"] = VERIFIED in setups
         out.append(s)
-    out.sort(key=lambda s: -s["score"])
+    out.sort(key=lambda s: (not s["verified"], -s["score"]))
 
     os.makedirs(out_dir, exist_ok=True)
     result = {"updated": f"{now:%Y-%m-%d %H:%M}", "last_candle": btc["candle"], "btc": btc, "scanned": len(data),
@@ -109,9 +114,9 @@ def render(r):
             for k, p in s["plans"].items())
         why = "".join(f"<li><b>{e(k)}</b> - {e(v)}</li>" for k, v in s["setups"].items())
         base = s["base"]
-        btxt = (f"기준 거래대금 봉: {base['value_eok']}억원, {base['days_ago']}캔들 전" if base else "")
+        btxt = (f"기준 거래대금 봉: {base['value_eok']}억원(평소의 {base['mult']}배), {base['days_ago']}캔들 전 · 직전 봉 대비 거래량 {s['vol_ratio']:.0%}" if base else "")
         parts = " · ".join(f"{k} {v}" for k, v in s["parts"].items())
-        cards.append(f"""<article class="card g{s['grade']}"><header><div><h2>{e(s['name'])} <small>{e(s['market'])}</small></h2>
+        cards.append(f"""<article class="card g{s['grade']}"><header><div><h2>{e(s['name'])} <small>{e(s['market'])}</small> <span class="bd {'v' if s['verified'] else 'r'}">{'백테스트 검증' if s['verified'] else '참고'}</span></h2>
 <p class="mut">현재가 {strategy.fmt(s['price'])} · 24h 거래대금 {s['v24_eok']:,}억 ({s['rank']}위)</p></div>
 <div class="sc"><b>{s['score']}</b><span>/{r['max_score']} {s['grade']}</span></div></header>
 <div class="sp">{spark(s['chart'])}</div>
@@ -132,13 +137,14 @@ header{{display:flex;justify-content:space-between;gap:12px;align-items:flex-sta
 .sc{{text-align:right;white-space:nowrap}}.sc b{{font-size:26px}}.sc span{{color:var(--mut);font-size:12px;margin-left:2px}}.sp{{color:var(--acc);margin:6px 0}}
 .why{{margin:6px 0;padding-left:18px;font-size:13px}}.tw{{overflow-x:auto}}table{{border-collapse:collapse;width:100%;font-size:13px;min-width:460px}}
 th,td{{text-align:right;padding:5px 6px;border-bottom:1px solid var(--line);white-space:nowrap}}th:first-child,td:first-child{{text-align:left}}th{{color:var(--mut);font-weight:500}}
+.bd{{font-size:11px;font-weight:600;border-radius:99px;padding:1px 8px;margin-left:4px;vertical-align:middle}}.bd.v{{background:var(--A);color:#fff}}.bd.r{{background:var(--line);color:var(--mut)}}
 .empty{{text-align:center;color:var(--mut);padding:40px 0}}footer{{color:var(--mut);font-size:12px;margin-top:24px}}</style></head><body><main>
 <h1>업비트 유목민 · 4시간봉</h1>
 <p class="mut">갱신 {r['updated']} (KST) · 기준 캔들 {e(btc['candle'])} · 스캔 {r['scanned']}개 코인 · 후보 {len(r['signals'])}개</p>
 <div class="top"><b>BTC 시황</b> {strategy.fmt(btc['price'])} · {e(state)}<p class="mut small">4시간봉은 업비트 기준 01·05·09·13·17·21시에 시작하고 4시간 뒤 마감됩니다. 마감된 봉만 사용합니다.</p></div>
 {body}
 <footer>조건이 얼마나 갖춰졌는지 보는 규칙 기반 점수이며 수익을 예측하지 않습니다. 투자 판단과 주문은 직접 하세요. 재료(뉴스) 항목은 아직 반영하지 않아 90점 만점입니다.
-백테스트(2025-12~2026-10, 40개 코인)에서 이 전략의 평균 성과는 거의 본전 수준이었습니다.</footer></main></body></html>"""
+기준봉 거래대금이 평소의 10~20배인 핵심 타점만 표시합니다(백테스트 최적 구간). 그중 '백테스트 검증' 표시는 바닥주 224선 돌파로, 40개 코인·약 10개월 중 48건에서 학습기(PF 2.4)와 검증기(PF 3.4) 모두 성과가 좋았던 타점입니다. 나머지 '참고' 타점은 장세에 따라 본전 수준이었습니다. 과거 성과가 앞으로를 보장하지 않습니다.</footer></main></body></html>"""
 
 
 if __name__ == "__main__":
